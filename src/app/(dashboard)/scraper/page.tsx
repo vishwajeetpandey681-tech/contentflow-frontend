@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Plus, Play, Search, Rss, Sparkles, ChevronDown, ChevronUp, FileText, BookOpen, ChevronRight } from 'lucide-react'
+import { Plus, Play, Search, Rss, Sparkles, ChevronDown, ChevronUp, FileText, ChevronRight } from 'lucide-react'
 import { useSources } from '@/hooks/useSources'
 import { useLogs } from '@/hooks/useLogs'
 import { sourcesApi, logsApi } from '@/lib/api'
@@ -33,7 +33,6 @@ export default function ScraperPage() {
   const [logsExpanded, setLogsExpanded] = useState(true)
   const [scrapingId, setScrapingId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [libraryOpen, setLibraryOpen] = useState(false)
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const sourcesSubTab = useUIStore(s => s.sourcesTab)
   const setSourcesSubTab = useUIStore(s => s.setSourcesTab)
@@ -124,43 +123,15 @@ export default function ScraperPage() {
   } as const
 
   return (
-    <div className="scraper-page flex flex-1 flex-col overflow-hidden lg:flex-row" style={{ background: 'var(--bg)' }}>
-      {/* Left — Library sidebar: full-width when Library tab; collapsible when Active tab */}
-      {sourcesSubTab === 'library' ? (
+    <div className="scraper-page flex flex-1 flex-col overflow-hidden lg:flex-row" data-sources-tab={sourcesSubTab} style={{ background: 'var(--bg)' }}>
+      {/* Left — Library sidebar: only when Library tab */}
+      {sourcesSubTab === 'library' && (
         <div className="scraper-library scraper-library-standalone flex flex-1 flex-col min-w-0 [&_.scraper-library-inner]:!max-h-none" style={{ borderRight: '1px solid var(--border)' }}>
           <div className="scraper-library-inner flex-1 min-h-0 flex flex-col overflow-hidden">
             <SourceLibrarySidebar existingUrls={existingUrls} onAdded={refresh} hideTitle />
           </div>
         </div>
-      ) : sourcesSubTab === 'active' ? (
-      <div className={`scraper-library hidden lg:flex ${libraryOpen ? '' : 'collapsed'}`}>
-        <button
-          type="button"
-          onClick={() => setLibraryOpen(v => !v)}
-          className="scraper-library-toggle"
-          style={{
-            alignItems: 'center',
-            gap: 8,
-            width: '100%',
-            padding: '12px 16px',
-            background: 'var(--surface)',
-            border: 'none',
-            borderBottom: '1px solid var(--border)',
-            color: 'var(--text)',
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          <BookOpen size={18} style={{ color: 'var(--accent-light)' }} />
-          Library
-          <ChevronRight size={16} style={{ marginLeft: 'auto', transform: libraryOpen ? 'rotate(90deg)' : 'none' }} />
-        </button>
-        <div className="scraper-library-inner" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <SourceLibrarySidebar existingUrls={existingUrls} onAdded={refresh} />
-        </div>
-      </div>
-      ) : null}
+      )}
 
       {/* Middle — Active sources sidebar (only when Active tab) */}
       {sourcesSubTab === 'active' && (

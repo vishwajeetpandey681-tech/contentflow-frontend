@@ -6,7 +6,7 @@ import {
   Loader2, X, RefreshCw, Search, ChevronDown,
   Upload, Image as ImageIcon, ExternalLink, CheckCircle2, Trash2,
 } from 'lucide-react'
-import { settingsApi, wpMetaApi, publishApi } from '@/lib/api'
+import { settingsApi, wpMetaApi, publishApi, inboxApi } from '@/lib/api'
 import toast from 'react-hot-toast'
 import type { ArticleRewrite } from '@/types/article'
 
@@ -19,11 +19,13 @@ interface WPPublishPanelProps {
     status: string
     categoryId: string
     authorId: string
-    tagIds?: number[]
+    tagNames?: string[]
     featuredMediaId?: number
     wordpressSiteId?: string
   }) => Promise<void>
   onReject?: () => Promise<void>
+  /** Call after article is updated (e.g. image extracted) so parent can refetch */
+  onArticleUpdated?: () => void
 }
 
 const DEFAULT_FIELD_MAP = [
@@ -78,7 +80,7 @@ function extractArticleTerms(text: string): string[] {
     .filter(w => w.length >= 2 && !/^(the|and|for|are|but|not|you|all|can|had|her|was|one|our|out|has|have|this|that|with|from|into|more|than|when|were|been|said|each|which|their|there|would|could|should|about)$/i.test(w))
 }
 
-export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublish, onReject }: WPPublishPanelProps) {
+export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublish, onReject, onArticleUpdated }: WPPublishPanelProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -89,7 +91,6 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
   const [wpFieldMap, setWpFieldMap] = useState<{ passId: string; label: string; wpField: string }[]>(DEFAULT_FIELD_MAP)
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([])
-  const [tags, setTags] = useState<{ id: number; name: string }[]>([])
   const [users, setUsers] = useState<{ id: number; name: string }[]>([])
   const [metaLoading, setMetaLoading] = useState(false)
 
@@ -107,7 +108,8 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
     return () => document.removeEventListener('click', onOutside)
   }, [categoryOpen])
 
-  const [tagIds, setTagIds] = useState<number[]>([])
+  const [tagNames, setTagNames] = useState<string[]>([])
+  const [customTagInput, setCustomTagInput] = useState('')
   const [authorId, setAuthorId] = useState('')
   const [publishing, setPublishing] = useState(false)
 
@@ -117,6 +119,7 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
   const [compressing, setCompressing] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [extractingImage, setExtractingImage] = useState(false)
   const [uploadedMediaId, setUploadedMediaId] = useState<number | null>(null)
   const [uploadedMediaUrl, setUploadedMediaUrl] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -140,12 +143,10 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
     setMetaLoading(true)
     Promise.all([
       wpMetaApi.categories(siteId),
-      wpMetaApi.tags(siteId),
       wpMetaApi.users(siteId),
     ])
-      .then(([cats, tgs, usrs]) => {
+      .then(([cats, usrs]) => {
         setCategories(cats || [])
-        setTags(tgs || [])
         setUsers(usrs || [])
       })
       .catch(err => toast.error(err?.message || 'Could not fetch WordPress metadata'))
@@ -202,6 +203,19 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
     setUploadedMediaUrl(null)
   }
 
+  const handleExtractImage = async () => {
+    setExtractingImage(true)
+    try {
+      await inboxApi.extractImage(articleId)
+      toast.success('Image extracted from article source')
+      onArticleUpdated?.()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not extract image from source')
+    } finally {
+      setExtractingImage(false)
+    }
+  }
+
   const handleUseSourceImage = async () => {
     if (!article?.image) return
     setUploadingImage(true)
@@ -218,32 +232,39 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
     }
   }
 
-  // ─── Tags (article-based suggestions) ─────────────────────────────────────
-  const toggleTag = (id: number) =>
-    setTagIds(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
+  // ─── Tags (post-based suggestions from rewrite output only) ─────────────────
+  const toggleTag = (name: string) =>
+    setTagNames(prev => prev.includes(name) ? prev.filter(t => t !== name) : [...prev, name])
 
-  const articleTerms = useMemo(() => {
+  const addCustomTag = () => {
+    const name = customTagInput.trim().toLowerCase().replace(/\s+/g, ' ')
+    if (!name || name.length < 2) return
+    if (tagNames.includes(name)) {
+      setCustomTagInput('')
+      return
+    }
+    if (tagLimitReached) return
+    setTagNames(prev => [...prev, name])
+    setCustomTagInput('')
+  }
+
+  const suggestedTags = useMemo(() => {
     const parts: string[] = []
-    if (article?.title) parts.push(article.title)
-    if (article?.description) parts.push(article.description)
-    if (article?.category) parts.push(article.category)
-    if (article?.fullContent) parts.push(article.fullContent.slice(0, 1200))
     rewrite?.passes?.forEach(p => {
-      if (p.output) parts.push(p.id === 'full' ? p.output.slice(0, 800) : p.output)
+      if (p.output) parts.push(p.id === 'full' ? p.output.slice(0, 1200) : p.output)
     })
     const terms = new Set<string>()
     parts.forEach(t => extractArticleTerms(t).forEach(w => terms.add(w)))
-    return Array.from(terms)
-  }, [article, rewrite?.passes])
+    const keywordsPass = rewrite?.passes?.find(p => p.id === 'keywords')
+    const kw = keywordsPass?.output?.trim()
+    if (kw) {
+      kw.split(/[\s,#-]+/).filter(Boolean).forEach(w => terms.add(w.toLowerCase()))
+    }
+    return Array.from(terms).filter(t => t.length >= 2).slice(0, 30)
+  }, [rewrite?.passes])
 
-  const isRecommended = (name: string) => {
-    const n = name.toLowerCase()
-    return articleTerms.some(t => n.includes(t) || t.includes(n) || n.split(/[\s#-]+/).some(w => w.length >= 2 && (t.includes(w) || w.includes(t))))
-  }
-  const recommendedTags = tags.filter(t => isRecommended(t.name))
-  const otherTags = tags.filter(t => !isRecommended(t.name))
   const TAG_LIMIT = 10
-  const tagLimitReached = tagIds.length >= TAG_LIMIT
+  const tagLimitReached = tagNames.length >= TAG_LIMIT
 
   // ─── Category filter ──────────────────────────────────────────────────────
   const categorySearchLower = categorySearch.toLowerCase().trim()
@@ -262,7 +283,7 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
         status: overrideStatus ?? status,
         categoryId,
         authorId,
-        tagIds: tagIds.length ? tagIds : undefined,
+        tagNames: tagNames.length ? tagNames : undefined,
         featuredMediaId: uploadedMediaId ?? undefined,
         wordpressSiteId: wpSites.length > 1 ? effectiveSiteId : undefined,
       })
@@ -429,36 +450,66 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
         </select>
       </div>
 
-      {/* Tags */}
+      {/* Tags — suggested from post (rewrite output) only */}
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Tags <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>(max {TAG_LIMIT})</span></div>
-        {recommendedTags.length > 0 && (
-          <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 10, color: 'var(--cyan)', marginBottom: 4, fontWeight: 600 }}>Suggested from article</div>
+        {suggestedTags.length > 0 ? (
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--cyan)', marginBottom: 4, fontWeight: 600 }}>Suggested from post</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {recommendedTags.map(t => (
-                <button key={t.id} type="button"
-                  onClick={() => (!tagLimitReached || tagIds.includes(t.id)) && toggleTag(t.id)}
-                  style={{ padding: '3px 8px', fontSize: 11, background: tagIds.includes(t.id) ? 'var(--accent-glow)' : 'rgba(34,211,238,0.1)', color: tagIds.includes(t.id) ? 'var(--accent-light)' : 'var(--cyan)', border: `1px solid ${tagIds.includes(t.id) ? 'rgba(124,58,237,0.3)' : 'rgba(34,211,238,0.25)'}`, borderRadius: 6, cursor: 'pointer', opacity: (tagLimitReached && !tagIds.includes(t.id)) ? 0.4 : 1 }}>
-                  {t.name}
+              {suggestedTags.map(name => (
+                <button key={name} type="button"
+                  onClick={() => (!tagLimitReached || tagNames.includes(name)) && toggleTag(name)}
+                  style={{ padding: '3px 8px', fontSize: 11, background: tagNames.includes(name) ? 'var(--accent-glow)' : 'rgba(34,211,238,0.1)', color: tagNames.includes(name) ? 'var(--accent-light)' : 'var(--cyan)', border: `1px solid ${tagNames.includes(name) ? 'rgba(124,58,237,0.3)' : 'rgba(34,211,238,0.25)'}`, borderRadius: 6, cursor: 'pointer', opacity: (tagLimitReached && !tagNames.includes(name)) ? 0.4 : 1 }}>
+                  {name.charAt(0).toUpperCase() + name.slice(1)}
                 </button>
               ))}
             </div>
           </div>
+        ) : (
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Run rewrite to see tag suggestions from post content</div>
         )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-          {otherTags.slice(0, 40).map(t => (
-            <button key={t.id} type="button"
-              onClick={() => (!tagLimitReached || tagIds.includes(t.id)) && toggleTag(t.id)}
-              style={{ padding: '3px 8px', fontSize: 11, background: tagIds.includes(t.id) ? 'var(--accent-glow)' : 'var(--surface)', color: tagIds.includes(t.id) ? 'var(--accent-light)' : 'var(--text-muted)', border: `1px solid ${tagIds.includes(t.id) ? 'rgba(124,58,237,0.3)' : 'var(--border)'}`, borderRadius: 6, cursor: 'pointer', opacity: (tagLimitReached && !tagIds.includes(t.id)) ? 0.4 : 1 }}>
-              {t.name}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            value={customTagInput}
+            onChange={e => setCustomTagInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTag() } }}
+            placeholder="Add custom tag..."
+            disabled={tagLimitReached}
+            style={{
+              flex: 1,
+              minWidth: 120,
+              padding: '6px 10px',
+              fontSize: 11,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              color: 'var(--text)',
+            }}
+          />
+          <button
+            type="button"
+            onClick={addCustomTag}
+            disabled={tagLimitReached || !customTagInput.trim()}
+            style={{
+              padding: '6px 12px',
+              fontSize: 11,
+              background: tagLimitReached ? 'var(--surface)' : 'var(--accent)',
+              color: tagLimitReached ? 'var(--text-dim)' : '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: tagLimitReached ? 'not-allowed' : 'pointer',
+              opacity: tagLimitReached || !customTagInput.trim() ? 0.6 : 1,
+            }}
+          >
+            Add
+          </button>
         </div>
-        {tagIds.length > 0 && (
+        {tagNames.length > 0 && (
           <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 5 }}>
-            Selected: {tagIds.length}/{TAG_LIMIT}
-            {tagIds.length > 5 && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>3–5 is optimal for SEO</span>}
+            Selected: {tagNames.length}/{TAG_LIMIT}
+            {tagNames.length > 5 && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>3–5 is optimal for SEO</span>}
           </div>
         )}
       </div>
@@ -533,8 +584,24 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
             )}
           </div>
         ) : (
-          /* Drop zone + Use source image */
+          /* Drop zone + Extract / Use source image */
           <div>
+            {!article?.image && !extractingImage && (
+              <button
+                type="button"
+                onClick={handleExtractImage}
+                style={{ marginBottom: 10, ...sBtn, width: '100%', justifyContent: 'center', background: 'rgba(124,58,237,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(124,58,237,0.3)' }}
+              >
+                <RefreshCw size={12} />
+                Extract image from source
+              </button>
+            )}
+            {!article?.image && extractingImage && (
+              <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                Extracting image from article…
+              </div>
+            )}
             {article?.image && !uploadingImage && (
               <button
                 type="button"

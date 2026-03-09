@@ -78,7 +78,7 @@ export function useRewrite(articleId: string | null, fallbackRewrite?: ArticleRe
     status?: string
     categoryId?: string
     authorId?: string
-    tagIds?: number[]
+    tagNames?: string[]
     featuredMediaId?: number
     wordpressSiteId?: string
   }) => {

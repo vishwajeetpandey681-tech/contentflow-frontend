@@ -28,7 +28,7 @@ interface RewriteEditorLayoutProps {
   rewrite: ArticleRewrite | undefined
   onOutputChange: (passId: string, value: string) => void
   onCustomFooterChange?: (value: string | null) => void
-  onPublish: (opts: { status: string; categoryId: string; authorId: string; tagIds?: number[]; featuredMediaId?: number; wordpressSiteId?: string }) => Promise<void>
+  onPublish: (opts: { status: string; categoryId: string; authorId: string; tagNames?: string[]; featuredMediaId?: number; wordpressSiteId?: string }) => Promise<void>
   onReject?: () => Promise<void>
   onBack: () => void
   onRerunAll: () => void
@@ -49,6 +49,7 @@ interface RewriteEditorLayoutProps {
   allDone: boolean
   publishLoading: boolean
   runningPassIndex: number
+  onArticleUpdated?: () => void
 }
 
 export function RewriteEditorLayout({
@@ -77,6 +78,7 @@ export function RewriteEditorLayout({
   allDone,
   publishLoading,
   runningPassIndex,
+  onArticleUpdated,
 }: RewriteEditorLayoutProps) {
   const passes = rewrite?.passes ?? []
   const fullPass = getPass(passes, 'full')
@@ -584,6 +586,7 @@ export function RewriteEditorLayout({
               wpPostId={article.wpPostId}
               onPublish={onPublish}
               onReject={onReject}
+              onArticleUpdated={onArticleUpdated}
             />
           </div>
         </div>

@@ -34,7 +34,7 @@ export default function RewritePage() {
   const [takeOverLoading, setTakeOverLoading] = useState(false)
   const hasAttemptedLock = useRef(false)
 
-  const { data: article } = useSWR(articleId ? `article-${articleId}` : null, () => fetcher(articleId))
+  const { data: article, error: articleError, isLoading: articleLoading, mutate: mutateArticle } = useSWR(articleId ? `article-${articleId}` : null, () => fetcher(articleId))
   const {
     lockedByMe,
     acquireLock,
@@ -268,7 +268,7 @@ export default function RewritePage() {
     status: string
     categoryId: string
     authorId: string
-    tagIds?: number[]
+    tagNames?: string[]
     featuredMediaId?: number
     wordpressSiteId?: string
   }) => {
@@ -305,10 +305,52 @@ export default function RewritePage() {
     }
   }
 
+  if (articleError) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
+        <div style={{ color: 'var(--red)', fontSize: 14, textAlign: 'center' }}>
+          {articleError?.message || 'Failed to load article'}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+          Ensure the backend is running: <code style={{ fontSize: 11 }}>cd contentflow-backend && node server.js</code>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            onClick={() => router.push('/scraper/inbox/')}
+            style={{ padding: '8px 16px', fontSize: 12, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
+          >
+            Back to Inbox
+          </button>
+          <button
+            onClick={() => mutateArticle()}
+            style={{ padding: '8px 16px', fontSize: 12, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!article && articleLoading) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--text-muted)' }}>
+        <Loader2 size={32} style={{ animation: 'spin 0.8s linear infinite' }} />
+        <span style={{ fontSize: 14 }}>Loading article…</span>
+      </div>
+    )
+  }
+
   if (!article) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-        Loading…
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
+        <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Article not found</span>
+        <button
+          onClick={() => router.push('/scraper/inbox/')}
+          style={{ padding: '8px 16px', fontSize: 12, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
+        >
+          Back to Inbox
+        </button>
       </div>
     )
   }
@@ -541,7 +583,7 @@ export default function RewritePage() {
   if (showEditorLayout) {
     return (
       <>
-      <RewriteEditorLayout
+        <RewriteEditorLayout
         article={article}
         rewrite={rewrite}
         onOutputChange={(passId, value) => updatePassOutput(passId, value)}
@@ -574,6 +616,7 @@ export default function RewritePage() {
         allDone={allDone}
         publishLoading={topbarPublishLoading}
         runningPassIndex={runningIndex >= 0 ? runningIndex : 0}
+        onArticleUpdated={mutateArticle}
       />
       {lockModal}
       </>
@@ -1080,6 +1123,7 @@ export default function RewritePage() {
               wpPostId={article?.wpPostId}
               onPublish={handlePublish}
               onReject={handleReject}
+              onArticleUpdated={mutateArticle}
             />
           </div>
         </div>
@@ -1101,7 +1145,7 @@ export default function RewritePage() {
         </div>
         <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
         <div style={{ marginTop: 12 }}>
-          <WPPublishPanel articleId={articleId} rewrite={rewrite} article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined} wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} />
+          <WPPublishPanel articleId={articleId} rewrite={rewrite} article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined} wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} onArticleUpdated={mutateArticle} />
         </div>
       </div>
       <div

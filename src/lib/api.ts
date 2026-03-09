@@ -139,6 +139,7 @@ export const inboxApi = {
   unlinkWpPublish: (id: string) => api.delete(`/inbox/${id}/wp-publish`),
   stats: () => api.get('/inbox/meta/stats', { timeout: 6000 }),
   fetchFull: (id: string) => api.post(`/inbox/${id}/fetch`),
+  extractImage: (id: string) => api.post<{ data: { image: string } }>(`/inbox/${id}/extract-image`).then(r => r.data.data),
   rewrite: (id: string)  => api.post(`/inbox/${id}/rewrite`),
   lock: (id: string, takeOver?: boolean) =>
     api.post<{ data: { locked: true; lockedBy: string; lockedByName: string; lockExpiresAt: string } }>(
@@ -178,7 +179,7 @@ export const publishApi = {
       status?: string
       categoryId?: string
       authorId?: string
-      tagIds?: number[]
+      tagNames?: string[]
       featuredMediaId?: number
       wordpressSiteId?: string
     }

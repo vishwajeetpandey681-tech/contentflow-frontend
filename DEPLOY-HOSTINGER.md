@@ -77,7 +77,19 @@ sudo apt install -y git
 
 ---
 
-## 4. Clone Repos
+## 4. Create Backend Repo (if not exists)
+
+On GitHub: **New repository** → name: `csr-studio-backend` → Create (no README).
+
+Then push from your machine:
+```powershell
+cd c:\Users\7DT\contentflow-backend
+git push -u origin main
+```
+
+---
+
+## 5. Clone Repos
 
 ```bash
 sudo mkdir -p /var/www/csr-studio
@@ -92,7 +104,7 @@ mkdir -p logs
 
 ---
 
-## 5. Environment Variables
+## 6. Environment Variables
 
 ### Backend (`/var/www/csr-studio/backend/.env`)
 
@@ -115,7 +127,7 @@ NEXT_PUBLIC_API_URL=https://app.adtech365.com/api
 
 ---
 
-## 6. Build & Install
+## 7. Build & Install
 
 ```bash
 cd /var/www/csr-studio/backend
@@ -128,7 +140,7 @@ npm run build
 
 ---
 
-## 7. PM2
+## 8. PM2
 
 Copy ecosystem config and start:
 
@@ -149,7 +161,7 @@ pm2 status
 
 ---
 
-## 8. Traefik Configuration
+## 9. Traefik Configuration
 
 ### Option A: Traefik already running
 
@@ -174,13 +186,13 @@ sudo systemctl reload traefik
 
 ---
 
-## 9. DNS
+## 10. DNS
 
 Point `app.adtech365.com` A record to `62.72.12.114`.
 
 ---
 
-## 10. Firewall
+## 11. Firewall
 
 ```bash
 sudo ufw allow 22

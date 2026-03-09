@@ -1086,7 +1086,7 @@ export default function RewritePage() {
             <WPPublishPanel
               articleId={articleId}
               rewrite={rewrite}
-              article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined } : undefined}
+              article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined}
               wpPostId={article?.wpPostId}
               onPublish={handlePublish}
               onReject={handleReject}
@@ -1111,7 +1111,7 @@ export default function RewritePage() {
         </div>
         <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
         <div style={{ marginTop: 12 }}>
-          <WPPublishPanel articleId={articleId} rewrite={rewrite} article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined } : undefined} wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} />
+          <WPPublishPanel articleId={articleId} rewrite={rewrite} article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined} wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} />
         </div>
       </div>
       <div

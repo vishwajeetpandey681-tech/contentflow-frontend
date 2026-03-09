@@ -183,6 +183,9 @@ export const publishApi = {
       wordpressSiteId?: string
     }
   ) => api.post(`/publish/${articleId}/wordpress`, options),
+  /** Upload article's source image to WP Media. Returns { id, url }. */
+  uploadSourceImage: (articleId: string, wordpressSiteId?: string) =>
+    api.post<{ data: { id: number; url: string } }>(`/publish/${articleId}/upload-source-image`, { wordpressSiteId }).then(r => r.data.data),
 }
 
 export const wpMetaApi = {

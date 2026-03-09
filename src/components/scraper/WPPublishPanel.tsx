@@ -6,14 +6,14 @@ import {
   Loader2, X, RefreshCw, Search, ChevronDown,
   Upload, Image as ImageIcon, ExternalLink, CheckCircle2, Trash2,
 } from 'lucide-react'
-import { settingsApi, wpMetaApi } from '@/lib/api'
+import { settingsApi, wpMetaApi, publishApi } from '@/lib/api'
 import toast from 'react-hot-toast'
 import type { ArticleRewrite } from '@/types/article'
 
 interface WPPublishPanelProps {
   articleId: string
   rewrite: ArticleRewrite | undefined
-  article?: { title?: string; description?: string; fullContent?: string; category?: string } | null
+  article?: { title?: string; description?: string; fullContent?: string; category?: string; image?: string } | null
   wpPostId?: number | null
   onPublish: (options: {
     status: string
@@ -200,6 +200,22 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
     setImagePreviewUrl(null)
     setUploadedMediaId(null)
     setUploadedMediaUrl(null)
+  }
+
+  const handleUseSourceImage = async () => {
+    if (!article?.image) return
+    setUploadingImage(true)
+    try {
+      const result = await publishApi.uploadSourceImage(articleId, wpSites.length > 1 ? effectiveSiteId : undefined)
+      setUploadedMediaId(result.id)
+      setUploadedMediaUrl(result.url)
+      setImagePreviewUrl(result.url || article.image)
+      toast.success(`Source image uploaded to WP Media (#${result.id})`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not upload source image')
+    } finally {
+      setUploadingImage(false)
+    }
   }
 
   // ─── Tags (article-based suggestions) ─────────────────────────────────────
@@ -517,30 +533,48 @@ export function WPPublishPanel({ articleId, rewrite, article, wpPostId, onPublis
             )}
           </div>
         ) : (
-          /* Drop zone */
-          <div
-            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => {
-              e.preventDefault()
-              setDragOver(false)
-              const f = e.dataTransfer.files[0]
-              if (f) handleImageFile(f)
-            }}
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              border: `2px dashed ${dragOver ? 'var(--accent-light)' : 'var(--border)'}`,
-              borderRadius: 8,
-              padding: '18px 12px',
-              textAlign: 'center',
-              cursor: 'pointer',
-              background: dragOver ? 'var(--accent-glow)' : 'transparent',
-              transition: 'all 0.15s',
-            }}
-          >
-            <ImageIcon size={20} style={{ color: 'var(--text-dim)', display: 'block', margin: '0 auto 6px' }} />
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Drop image here or click to select</div>
-            <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 3 }}>JPG / PNG / WebP · compressed to WebP automatically</div>
+          /* Drop zone + Use source image */
+          <div>
+            {article?.image && !uploadingImage && (
+              <button
+                type="button"
+                onClick={handleUseSourceImage}
+                style={{ marginBottom: 10, ...sBtn, width: '100%', justifyContent: 'center', background: 'rgba(34,197,94,0.1)', color: 'var(--green)', border: '1px solid rgba(34,197,94,0.3)' }}
+              >
+                <ImageIcon size={12} />
+                Use source image from article
+              </button>
+            )}
+            {article?.image && uploadingImage && (
+              <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                Uploading source image…
+              </div>
+            )}
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => {
+                e.preventDefault()
+                setDragOver(false)
+                const f = e.dataTransfer.files[0]
+                if (f) handleImageFile(f)
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                border: `2px dashed ${dragOver ? 'var(--accent-light)' : 'var(--border)'}`,
+                borderRadius: 8,
+                padding: '18px 12px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                background: dragOver ? 'var(--accent-glow)' : 'transparent',
+                transition: 'all 0.15s',
+              }}
+            >
+              <ImageIcon size={20} style={{ color: 'var(--text-dim)', display: 'block', margin: '0 auto 6px' }} />
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Drop image here or click to select</div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 3 }}>JPG / PNG / WebP · compressed to WebP automatically</div>
+            </div>
           </div>
         )}
         <input

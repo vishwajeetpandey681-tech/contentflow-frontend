@@ -125,8 +125,15 @@ export default function ScraperPage() {
 
   return (
     <div className="scraper-page flex flex-1 flex-col overflow-hidden lg:flex-row" style={{ background: 'var(--bg)' }}>
-      {/* Left — Library sidebar (desktop; mobile when Library tab) */}
-      <div className={`scraper-library ${sourcesSubTab === 'library' ? 'flex [&_.scraper-library-toggle]:!hidden [&_.scraper-library-inner]:!max-h-none' : 'hidden'} lg:flex ${(libraryOpen || sourcesSubTab === 'library') ? '' : 'collapsed'}`}>
+      {/* Left — Library sidebar: full-width when Library tab; collapsible when Active tab */}
+      {sourcesSubTab === 'library' ? (
+        <div className="scraper-library flex flex-1 flex-col min-w-0 [&_.scraper-library-inner]:!max-h-none" style={{ borderRight: '1px solid var(--border)' }}>
+          <div className="scraper-library-inner flex-1 min-h-0 flex flex-col overflow-hidden">
+            <SourceLibrarySidebar existingUrls={existingUrls} onAdded={refresh} />
+          </div>
+        </div>
+      ) : sourcesSubTab === 'active' ? (
+      <div className={`scraper-library hidden lg:flex ${libraryOpen ? '' : 'collapsed'}`}>
         <button
           type="button"
           onClick={() => setLibraryOpen(v => !v)}
@@ -153,10 +160,12 @@ export default function ScraperPage() {
           <SourceLibrarySidebar existingUrls={existingUrls} onAdded={refresh} />
         </div>
       </div>
+      ) : null}
 
-      {/* Middle — Active sources sidebar */}
+      {/* Middle — Active sources sidebar (only when Active tab) */}
+      {sourcesSubTab === 'active' && (
       <div
-        className={`scraper-sources-panel ${sourcesOpen ? '' : 'collapsed'} ${sourcesSubTab !== 'active' ? 'max-lg:hidden' : ''}`}
+        className={`scraper-sources-panel ${sourcesOpen ? '' : 'collapsed'}`}
         style={{
           width: 320,
           flexShrink: 0,
@@ -398,10 +407,12 @@ export default function ScraperPage() {
         </div>
         </div>
       </div>
+      )}
 
-      {/* Right — Detail panel + Logs (hidden on mobile when Active tab + no selection, or Library tab) */}
+      {/* Right — Detail panel + Logs (hidden when Library tab; on mobile also hidden when Active tab + no selection) */}
+      {sourcesSubTab !== 'library' && (
       <div
-        className={`scraper-detail-panel ${(sourcesSubTab === 'library' || (sourcesSubTab === 'active' && !selected)) ? 'max-lg:hidden' : ''}`}
+        className={`scraper-detail-panel ${sourcesSubTab === 'active' && !selected ? 'max-lg:hidden' : ''}`}
         style={{
           flex: 1,
           overflow: 'hidden',
@@ -807,6 +818,7 @@ export default function ScraperPage() {
         </div>
         )}
       </div>
+      )}
     </div>
   )
 }

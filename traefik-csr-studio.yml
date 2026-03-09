@@ -1,0 +1,40 @@
+# Traefik dynamic config for CSR Studio — app.adtech365.com
+# Place in Traefik's file provider directory (e.g. /etc/traefik/dynamic/)
+#
+# Ensure your static config has a certResolver, e.g.:
+#   certificatesResolvers:
+#     letsencrypt:
+#       acme:
+#         email: your@email.com
+#         storage: /etc/traefik/acme.json
+#         httpChallenge:
+#           entryPoint: web
+
+http:
+  routers:
+    csr-studio-api:
+      rule: "Host(`app.adtech365.com`) && PathPrefix(`/api`)"
+      service: csr-studio-api
+      priority: 1
+      tls:
+        certResolver: letsencrypt
+
+    csr-studio-web:
+      rule: "Host(`app.adtech365.com`)"
+      service: csr-studio-web
+      priority: 0
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    csr-studio-api:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:3001"
+        passHostHeader: true
+
+    csr-studio-web:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:3000"
+        passHostHeader: true

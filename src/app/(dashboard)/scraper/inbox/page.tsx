@@ -1,0 +1,782 @@
+'use client'
+
+import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { Search, RefreshCw, CheckCheck, Calendar, Filter } from 'lucide-react'
+
+function toYMD(d: Date) {
+  return d.toISOString().slice(0, 10)
+}
+
+function toDateTimeLocal(d: Date, endOfDay = false) {
+  const x = new Date(d)
+  if (endOfDay) x.setHours(23, 59, 0, 0)
+  else x.setHours(0, 0, 0, 0)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}`
+}
+
+const DATE_PRESETS = [
+  { id: '', label: 'All time' },
+  { id: 'today', label: 'Today' },
+  { id: '7d', label: 'Last 7 days' },
+  { id: '30d', label: 'Last 30 days' },
+] as const
+import { useInbox } from '@/hooks/useInbox'
+import { useStats } from '@/hooks/useStats'
+import { inboxApi } from '@/lib/api'
+import { InboxStats } from '@/components/scraper/InboxStats'
+import { ArticleCard } from '@/components/scraper/ArticleCard'
+import { Spinner } from '@/components/ui/Spinner'
+import toast from 'react-hot-toast'
+import type { ArticleStatus } from '@/types/article'
+import { ARTICLE_CATEGORIES } from '@/types/source'
+
+const TAB_STATUSES: (ArticleStatus | 'published')[] = ['PENDING_REVIEW', 'APPROVED', 'published', 'REJECTED', 'FETCH_FAILED']
+
+const TAB_LABELS: Record<ArticleStatus | 'published', string> = {
+  PENDING_REVIEW: 'Pending',
+  APPROVED: 'Approved',
+  published: 'Published',
+  REJECTED: 'Rejected',
+  FETCH_FAILED: 'Failed',
+  EXTRACTION_FAILED: 'Failed',
+  EXPORTED: 'Exported',
+}
+
+function InboxTabContent({
+  status,
+  search,
+  limit,
+  articles,
+  total,
+  loading,
+  loadingMore,
+  error,
+  hasMore,
+  loadMore,
+  onRefresh,
+  onApprove,
+  onReject,
+  refreshStats,
+  onRetryRewrite,
+  onUpdatePost,
+  onUnlink,
+  showPublishedActions,
+  selectedIds,
+  onToggleSelect,
+  onSelectAll,
+}: {
+  status: ArticleStatus | 'published'
+  search: string
+  limit: number
+  articles: import('@/types/article').ScraperArticle[]
+  total: number
+  loading: boolean
+  loadingMore: boolean
+  error: string | null
+  hasMore: boolean
+  loadMore: () => void
+  onRefresh: () => void
+  onApprove: (id: string) => void
+  onReject: (id: string, reason?: string) => void
+  refreshStats: () => void
+  onRetryRewrite?: (id: string) => void
+  onUpdatePost?: (id: string) => void
+  onUnlink?: (id: string) => void
+  showPublishedActions?: boolean
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
+  onSelectAll?: (checked: boolean) => void
+}) {
+  const [loadingHint, setLoadingHint] = useState(false)
+  const showActions = status === 'PENDING_REVIEW'
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingHint(false)
+      return
+    }
+    const t = setTimeout(() => setLoadingHint(true), 4000)
+    return () => clearTimeout(t)
+  }, [loading])
+
+  const emptyIcons: Record<string, string> = {
+    PENDING_REVIEW: '⏳',
+    APPROVED: '✅',
+    published: '📤',
+    REJECTED: '✕',
+    FETCH_FAILED: '⚠️',
+  }
+  const emptyTitles: Record<string, string> = {
+    PENDING_REVIEW: 'No pending articles',
+    APPROVED: 'No approved articles',
+    published: 'No published articles',
+    REJECTED: 'No rejected articles',
+    FETCH_FAILED: 'No failed articles',
+  }
+  const emptySubs: Record<string, string> = {
+    PENDING_REVIEW: 'Add a source and click Scrape Now to fetch articles',
+    APPROVED: 'Articles will appear here after you process them from the Pending tab',
+    published: 'Articles published to WordPress will appear here',
+    REJECTED: 'Articles will appear here after you process them from the Pending tab',
+    FETCH_FAILED: 'Articles will appear here after you process them from the Pending tab',
+  }
+
+  return (
+    <div className="flex flex-1 flex-col overflow-y-auto p-3 md:p-4">
+      {error ? (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 200,
+            gap: 12,
+            color: 'var(--text-muted)',
+            fontSize: 12,
+          }}
+        >
+          <span style={{ color: 'var(--red)' }}>Failed to load articles</span>
+          <span style={{ textAlign: 'center', maxWidth: 280 }}>{error}</span>
+          <button
+            onClick={() => { onRefresh(); refreshStats(); }}
+            style={{
+              padding: '8px 16px',
+              fontSize: 12,
+              background: 'var(--accent-glow)',
+              color: 'var(--accent-light)',
+              border: '1px solid rgba(124,58,237,0.3)',
+              borderRadius: 8,
+              cursor: 'pointer',
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : loading ? (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 200,
+            gap: 10,
+            color: 'var(--text-muted)',
+            fontSize: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Spinner size={18} />
+            <span>Loading articles...</span>
+          </div>
+          {loadingHint && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                background: 'var(--card)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                fontSize: 11,
+                color: 'var(--text-dim)',
+                textAlign: 'center',
+                maxWidth: 280,
+              }}
+            >
+              Taking longer than usual? Ensure the backend is running on port 4500.
+              <br />
+              <code style={{ fontSize: 10, marginTop: 4, display: 'block' }}>
+                cd contentflow-backend && node server.js
+              </code>
+            </div>
+          )}
+        </div>
+      ) : articles.length === 0 ? (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 280,
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: 40, opacity: 0.25 }}>{emptyIcons[status] || '📰'}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>
+            {emptyTitles[status]}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'center', maxWidth: 260, lineHeight: 1.5 }}>
+            {emptySubs[status]}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              marginBottom: 12,
+              padding: '8px 0',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'Geist Mono, monospace' }}>
+                {total > 0 ? `Showing 1–${articles.length} of ${total}` : `${articles.length} articles`}
+              </span>
+              {showActions && onSelectAll && selectedIds !== undefined && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={articles.length > 0 && articles.every(a => selectedIds.has(a.id))}
+                    onChange={e => onSelectAll(e.target.checked)}
+                    style={{ accentColor: 'var(--accent)' }}
+                  />
+                  Select all
+                </label>
+              )}
+            </div>
+            {hasMore && (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  fontSize: 11,
+                  background: 'var(--accent-glow)',
+                  color: 'var(--accent-light)',
+                  border: '1px solid rgba(124,58,237,0.3)',
+                  borderRadius: 6,
+                  cursor: loadingMore ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {loadingMore ? (
+                  <>
+                    <Spinner size={12} />
+                    Loading…
+                  </>
+                ) : (
+                  `Load more (${total - articles.length} left)`
+                )}
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          {articles.map((article) => (
+            <ArticleCard
+              key={article.id}
+              article={article}
+              onApprove={() => onApprove(article.id)}
+              onReject={reason => onReject(article.id, reason)}
+              onRefresh={onRefresh}
+              onRefreshStats={refreshStats}
+              onRetryRewrite={onRetryRewrite}
+              onUpdatePost={onUpdatePost}
+              onUnlink={onUnlink}
+              showActions={showActions}
+              showPublishedActions={showPublishedActions}
+              selected={selectedIds?.has(article.id)}
+              onToggleSelect={onToggleSelect ? () => onToggleSelect(article.id) : undefined}
+            />
+          ))}
+          </div>
+          {hasMore && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 8 }}>
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 20px',
+                  fontSize: 12,
+                  background: 'var(--surface)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  cursor: loadingMore ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {loadingMore ? <Spinner size={16} /> : null}
+                Load more
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+export default function InboxPage() {
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState<ArticleStatus | 'published'>('PENDING_REVIEW')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [category, setCategory] = useState('')
+  const [limit, setLimit] = useState(30)
+  const [datePreset, setDatePreset] = useState<string>('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [approveSelectedLoading, setApproveSelectedLoading] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [filterOpen, setFilterOpen] = useState(false)
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [activeTab])
+  const [activeSourcesOnly, setActiveSourcesOnly] = useState(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      const v = localStorage.getItem('contentflow-inbox-my-sources-only')
+      return v === null ? true : v === '1'
+    } catch { return true }
+  })
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>()
+
+  const setActiveSourcesOnlyPersisted = (v: boolean) => {
+    setActiveSourcesOnly(v)
+    try { localStorage.setItem('contentflow-inbox-my-sources-only', v ? '1' : '0') } catch {}
+  }
+
+  const applyDatePreset = (preset: string) => {
+    setDatePreset(preset)
+    const now = new Date()
+    if (preset === 'today') {
+      setFromDate(toDateTimeLocal(now))
+      setToDate(toDateTimeLocal(now, true))
+    } else if (preset === '7d') {
+      const d = new Date(now)
+      d.setDate(d.getDate() - 7)
+      setFromDate(toDateTimeLocal(d))
+      setToDate(toDateTimeLocal(now, true))
+    } else if (preset === '30d') {
+      const d = new Date(now)
+      d.setDate(d.getDate() - 30)
+      setFromDate(toDateTimeLocal(d))
+      setToDate(toDateTimeLocal(now, true))
+    } else {
+      setFromDate('')
+      setToDate('')
+    }
+  }
+
+  const { stats = { pending: 0, approved: 0, rejected: 0, failed: 0, published: 0 }, refresh: refreshStats } = useStats()
+  const isPublishedTab = activeTab === 'published'
+  const { articles, total, loading, loadingMore, error, hasMore, loadMore, refresh } = useInbox(
+    isPublishedTab ? 'APPROVED' : activeTab,
+    debouncedSearch,
+    limit,
+    category,
+    fromDate,
+    toDate,
+    isPublishedTab,
+    activeSourcesOnly
+  )
+
+  const handleApprove = async (id: string) => {
+    try {
+      await inboxApi.approve(id)
+      toast.success('Approved — choose language & start rewrite on next page')
+      refresh()
+      refreshStats()
+      router.push(`/scraper/inbox/${id}/rewrite/`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Approve failed')
+    }
+  }
+
+  const handleRetryRewrite = async (id: string) => {
+    router.push(`/scraper/inbox/${id}/rewrite/`)
+  }
+
+  const handleUpdatePost = (id: string) => {
+    router.push(`/scraper/inbox/${id}/rewrite/`)
+  }
+
+  const handleUnlink = async (id: string) => {
+    try {
+      await inboxApi.unlinkWpPublish(id)
+      toast.success('Unlinked from WordPress')
+      refresh()
+      refreshStats()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unlink failed')
+    }
+  }
+
+  const handleReject = async (id: string, reason?: string) => {
+    try {
+      await inboxApi.reject(id, reason)
+      toast.success('Article rejected')
+      refresh()
+      refreshStats()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Reject failed')
+    }
+  }
+
+  const handleApproveSelected = async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) {
+      toast.error('Select articles to approve')
+      return
+    }
+    setApproveSelectedLoading(true)
+    try {
+      await Promise.all(ids.map(id => inboxApi.approve(id)))
+      toast.success(`Approved ${ids.length} article${ids.length === 1 ? '' : 's'}`)
+      setSelectedIds(new Set())
+      refresh()
+      refreshStats()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Approve failed')
+    } finally {
+      setApproveSelectedLoading(false)
+    }
+  }
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (activeTab !== 'PENDING_REVIEW') return
+    setSelectedIds(checked ? new Set(articles.map(a => a.id)) : new Set())
+  }
+
+  const handleSearch = (v: string) => {
+    setSearch(v)
+    clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => setDebouncedSearch(v), 350)
+  }
+
+  const countColors: Record<string, string> = {
+    PENDING_REVIEW: 'var(--amber)',
+    APPROVED: 'var(--green)',
+    published: 'var(--cyan)',
+    REJECTED: 'var(--red)',
+    FETCH_FAILED: 'var(--text-dim)',
+  }
+  const countBgs: Record<string, string> = {
+    PENDING_REVIEW: 'var(--amber-bg)',
+    APPROVED: 'var(--green-bg)',
+    published: 'rgba(34,211,238,0.15)',
+    REJECTED: 'var(--red-bg)',
+    FETCH_FAILED: 'rgba(255,255,255,0.04)',
+  }
+
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden" style={{ background: 'var(--bg)' }}>
+      <InboxStats stats={stats} />
+
+      {/* Tabs bar - overflow-x scroll, no wrap */}
+      <div className="flex shrink-0 border-b" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        <div className="inbox-tabs-scroll flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
+          {TAB_STATUSES.map(status => (
+            <button
+              key={status}
+              onClick={() => setActiveTab(status)}
+              className="flex min-w-fit shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 py-3"
+              style={{
+                minHeight: 44,
+                fontSize: 12,
+                fontWeight: 500,
+                color: activeTab === status ? 'var(--text)' : 'var(--text-muted)',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: '2px solid',
+                borderBottomColor: activeTab === status ? 'var(--accent-light)' : 'transparent',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              {TAB_LABELS[status]}
+              {(status === 'PENDING_REVIEW' ? stats.pending : status === 'APPROVED' ? stats.approved : status === 'published' ? (stats.published ?? 0) : status === 'REJECTED' ? stats.rejected : stats.failed) > 0 && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    padding: '1px 6px',
+                    borderRadius: 10,
+                    fontFamily: 'Geist Mono, monospace',
+                    background: countBgs[status],
+                    color: countColors[status],
+                    border: `1px solid ${countColors[status]}22`,
+                  }}
+                >
+                  {status === 'PENDING_REVIEW' ? stats.pending : status === 'APPROVED' ? stats.approved : status === 'published' ? (stats.published ?? 0) : status === 'REJECTED' ? stats.rejected : stats.failed}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="flex shrink-0 items-center gap-1 border-l p-2" style={{ borderColor: 'var(--border)' }}>
+          <button
+            onClick={() => { refresh(); refreshStats(); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 10px',
+              minHeight: 44,
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              border: 'none',
+              borderRadius: 6,
+              fontSize: 11,
+              cursor: 'pointer',
+            }}
+          >
+            <RefreshCw size={13} />
+            Refresh
+          </button>
+          {activeTab === 'PENDING_REVIEW' && articles.length > 0 && (
+            <button
+              onClick={handleApproveSelected}
+              disabled={approveSelectedLoading || selectedIds.size === 0}
+              className="hidden md:flex"
+              style={{
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 10px',
+                minHeight: 44,
+                background: 'var(--green-bg)',
+                color: 'var(--green)',
+                border: '1px solid rgba(34,197,94,0.2)',
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: approveSelectedLoading || selectedIds.size === 0 ? 'not-allowed' : 'pointer',
+                opacity: approveSelectedLoading || selectedIds.size === 0 ? 0.6 : 1,
+              }}
+            >
+              <CheckCheck size={13} />
+              Approve Selected ({selectedIds.size})
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Toolbar — mobile: search row + Approve All row; desktop: single row */}
+      <div
+        className="flex shrink-0 flex-col gap-2 border-b p-3 md:flex-row md:flex-wrap md:items-center md:gap-2 md:p-4"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+      >
+        {/* Row 1: Search full-width + Filter (mobile) */}
+        <div className="flex min-w-0 flex-1 items-center gap-2 md:order-2 md:flex-1">
+          <div className="relative min-w-0 flex-1" style={{ maxWidth: 340 }}>
+            <Search
+              size={13}
+              style={{
+                position: 'absolute',
+                left: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--text-dim)',
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Search articles..."
+              value={search}
+              onChange={e => handleSearch(e.target.value)}
+              className="w-full rounded-lg border py-1.5 pl-8 pr-2.5 text-xs md:py-2"
+              style={{
+                background: 'var(--card)',
+                borderColor: 'var(--border)',
+                color: 'var(--text)',
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setFilterOpen(o => !o)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg md:hidden"
+            style={{
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            <Filter size={14} />
+          </button>
+        </div>
+        {/* Approve Selected bar — mobile only, Pending tab */}
+        {activeTab === 'PENDING_REVIEW' && articles.length > 0 && (
+          <div
+            className="flex w-full items-center justify-end md:hidden"
+            style={{ background: 'var(--accent-subtle)', padding: '8px 12px', borderRadius: 8 }}
+          >
+            <button
+              onClick={handleApproveSelected}
+              disabled={approveSelectedLoading || selectedIds.size === 0}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold"
+              style={{
+                background: 'var(--green-bg)',
+                color: 'var(--green)',
+                border: '1px solid rgba(34,197,94,0.2)',
+                opacity: approveSelectedLoading || selectedIds.size === 0 ? 0.6 : 1,
+              }}
+            >
+              <CheckCheck size={13} />
+              Approve Selected ({selectedIds.size})
+            </button>
+          </div>
+        )}
+        {/* Filters — collapsible on mobile */}
+        <div className={`flex flex-wrap items-center gap-2 ${filterOpen ? 'flex' : 'hidden'} md:flex`}>
+        <div className="flex items-center gap-1.5">
+          <Calendar size={12} style={{ color: 'var(--text-dim)' }} />
+          <select
+            value={datePreset}
+            onChange={e => applyDatePreset(e.target.value)}
+            style={{
+              padding: '6px 10px',
+              fontSize: 11,
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: 'var(--text)',
+              minWidth: 100,
+            }}
+          >
+            {DATE_PRESETS.map(p => (
+              <option key={p.id || 'all'} value={p.id}>{p.label}</option>
+            ))}
+          </select>
+          <input
+            type="datetime-local"
+            value={fromDate}
+            onChange={e => { setFromDate(e.target.value); setDatePreset(''); }}
+            style={{
+              padding: '6px 8px',
+              fontSize: 11,
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: 'var(--text)',
+              maxWidth: 165,
+            }}
+          />
+          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>–</span>
+          <input
+            type="datetime-local"
+            value={toDate}
+            onChange={e => { setToDate(e.target.value); setDatePreset(''); }}
+            style={{
+              padding: '6px 8px',
+              fontSize: 11,
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: 'var(--text)',
+              maxWidth: 165,
+            }}
+          />
+        </div>
+        <label
+          className="flex items-center gap-2 cursor-pointer"
+          style={{ fontSize: 11, color: 'var(--text-muted)' }}
+          title="Show only articles from sources you have enabled (identity-based inbox)"
+        >
+          <input
+            type="checkbox"
+            checked={activeSourcesOnly}
+            onChange={e => setActiveSourcesOnlyPersisted(e.target.checked)}
+          />
+          My sources only
+        </label>
+        <select
+          value={category}
+          onChange={e => setCategory(e.target.value)}
+          style={{
+            padding: '6px 10px',
+            fontSize: 11,
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            color: 'var(--text)',
+            minWidth: 120,
+          }}
+        >
+          <option value="">All categories</option>
+          {ARTICLE_CATEGORIES.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <div className="flex items-center gap-2">
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Show</span>
+          <select
+            value={limit}
+            onChange={e => setLimit(Number(e.target.value))}
+            style={{
+              padding: '4px 8px',
+              fontSize: 11,
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              color: 'var(--text)',
+            }}
+          >
+            <option value={10}>10</option>
+            <option value={30}>30</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'Geist Mono, monospace' }}>
+            {total > 0 ? `${articles.length} of ${total}` : `${articles.length} articles`}
+          </span>
+        </div>
+        </div>
+      </div>
+
+      {/* List - render based on active tab */}
+      {TAB_STATUSES.map(tab => (
+        activeTab === tab && (
+          <InboxTabContent
+            key={tab}
+            status={tab}
+            search={debouncedSearch}
+            limit={limit}
+            articles={articles}
+            total={total}
+            loading={loading}
+            loadingMore={loadingMore}
+            error={error}
+            hasMore={hasMore}
+            loadMore={loadMore}
+            onRefresh={refresh}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            refreshStats={refreshStats}
+            onRetryRewrite={handleRetryRewrite}
+            onUpdatePost={handleUpdatePost}
+            onUnlink={handleUnlink}
+            showPublishedActions={tab === 'published'}
+            selectedIds={activeTab === 'PENDING_REVIEW' ? selectedIds : undefined}
+            onToggleSelect={activeTab === 'PENDING_REVIEW' ? handleToggleSelect : undefined}
+            onSelectAll={activeTab === 'PENDING_REVIEW' ? handleSelectAll : undefined}
+          />
+        )
+      ))}
+    </div>
+  )
+}

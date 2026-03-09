@@ -9,9 +9,11 @@ import toast from 'react-hot-toast'
 interface SourceLibrarySidebarProps {
   existingUrls: Set<string>
   onAdded: () => void
+  /** When true (Library tab), hide the "Library" header to avoid duplication with tab label */
+  hideTitle?: boolean
 }
 
-export function SourceLibrarySidebar({ existingUrls, onAdded }: SourceLibrarySidebarProps) {
+export function SourceLibrarySidebar({ existingUrls, onAdded, hideTitle }: SourceLibrarySidebarProps) {
   const [channelFilter, setChannelFilter] = useState<string>('')
   const [categoryFilter, setCategoryFilter] = useState<string>('')
   const [adding, setAdding] = useState<string | null>(null)
@@ -76,11 +78,13 @@ export function SourceLibrarySidebar({ existingUrls, onAdded }: SourceLibrarySid
       }}
     >
       <div style={{ padding: 16, borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <BookOpen size={18} style={{ color: 'var(--accent-light)' }} />
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Library</span>
-        </div>
-        <div className="library-filters" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {!hideTitle && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <BookOpen size={18} style={{ color: 'var(--accent-light)' }} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Library</span>
+          </div>
+        )}
+        <div className="library-filters" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: hideTitle ? 12 : undefined }}>
           <select value={channelFilter} onChange={e => setChannelFilter(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }}>
             <option value="">All channels</option>
             {CHANNELS.map(c => (

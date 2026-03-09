@@ -80,13 +80,19 @@
   .inbox-toolbar input[type="datetime-local"] { max-width: 100px !important; }
 }
 
-/* Mobile: Rewrite editor - stack sidebar below content */
+/* Mobile: Rewrite editor - stack sidebar below content, enable scroll */
 .rewrite-editor-layout {
   flex-direction: row;
+}
+.rewrite-editor-layout .overflow-y-auto,
+.rewrite-editor-sidebar.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 @media (max-width: 900px) {
   .rewrite-editor-layout {
     flex-direction: column;
+    min-height: 0;
   }
   .rewrite-editor-sidebar {
     width: 100% !important;
@@ -94,11 +100,17 @@
     border-left: none !important;
     border-top: 1px solid var(--border) !important;
   }
-  .rewrite-editor-layout > div:first-child { padding: 16px !important; }
+  .rewrite-editor-layout > div:first-child { padding: 16px !important; min-height: 0; }
 }
 @media (max-width: 600px) {
   .rewrite-topbar { flex-wrap: wrap; padding: 10px 12px !important; gap: 8 !important; }
   .rewrite-topbar button { min-height: 40px; }
+}
+
+/* Mobile: Rewrite page - enable scroll on passes panel */
+.rewrite-page .overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 /* Mobile: Prevent overflow */
@@ -147,6 +159,11 @@
   }
   .scraper-library.collapsed .scraper-library-inner {
     display: none;
+  }
+  /* Library tab standalone: full height, no max-height limit */
+  .scraper-library-standalone .scraper-library-inner {
+    max-height: none !important;
+    flex: 1 !important;
   }
   /* Library, then Active sources, then Detail */
   .scraper-sources-panel {

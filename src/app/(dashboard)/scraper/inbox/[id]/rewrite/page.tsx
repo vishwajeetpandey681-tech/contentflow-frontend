@@ -581,29 +581,19 @@ export default function RewritePage() {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' }}>
+    <div className="rewrite-page flex flex-1 flex-col min-h-0 overflow-hidden" style={{ background: 'var(--bg)' }}>
       {topbarDesktop}
       {topbarMobile}
 
       {/* Mobile: Pipeline strip (sticky below topbar) */}
-      <div className="lg:hidden" style={{ position: 'sticky', top: 52, zIndex: 15, flexShrink: 0, background: 'var(--bg)', borderBottom: '1px solid var(--border-subtle)' }}>
+      <div className="lg:hidden shrink-0" style={{ position: 'sticky', top: 52, zIndex: 15, background: 'var(--bg)', borderBottom: '1px solid var(--border-subtle)' }}>
         <RewritePipelineStrip passes={passes} />
       </div>
 
-      <div
-        className="flex flex-col lg:flex-row"
-        style={{ flex: 1, overflow: 'hidden' }}
-      >
-        {/* Passes panel */}
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
+        {/* Passes panel - scrollable on mobile */}
         <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: 16,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-          }}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-4"
         >
           <div
             style={{

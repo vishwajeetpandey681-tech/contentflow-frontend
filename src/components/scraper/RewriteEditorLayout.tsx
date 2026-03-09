@@ -98,7 +98,7 @@ export function RewriteEditorLayout({
   const wordCountVal = wordCount(fullContent)
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' }}>
+    <div className="rewrite-page flex flex-1 flex-col min-h-0 overflow-hidden" style={{ background: 'var(--bg)' }}>
       {/* Top bar - WordPress style (wraps on mobile) */}
       <div
         className="rewrite-topbar flex flex-wrap items-center gap-2 lg:gap-3 p-3 lg:p-4 shrink-0 border-b border-[var(--border)] bg-[var(--surface)]"
@@ -199,10 +199,10 @@ export function RewriteEditorLayout({
         </button>
       </div>
 
-      <div className="rewrite-editor-layout flex flex-col lg:flex-row flex-1 overflow-hidden">
-        {/* Main content area - WordPress editor style */}
+      <div className="rewrite-editor-layout flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
+        {/* Main content area - WordPress editor style (scrollable on mobile) */}
         <div
-          className="flex-1 overflow-y-auto p-4 lg:p-6 flex flex-col gap-5 min-w-0"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 lg:p-6 flex flex-col gap-5 min-w-0"
         >
           {/* Article info badge */}
           {article.source?.name && (
@@ -414,9 +414,9 @@ export function RewriteEditorLayout({
           )}
         </div>
 
-        {/* Right sidebar - Meta boxes (stacks below on mobile) */}
+        {/* Right sidebar - Meta boxes (stacks below on mobile, scrollable) */}
         <div
-          className="rewrite-editor-sidebar w-full lg:w-[320px] lg:flex-shrink-0 lg:border-l border-t lg:border-t-0 border-[var(--border)] p-4 overflow-y-auto bg-[var(--surface)]"
+          className="rewrite-editor-sidebar w-full lg:w-[320px] lg:flex-shrink-0 min-h-0 lg:border-l border-t lg:border-t-0 border-[var(--border)] p-4 overflow-y-auto overflow-x-hidden bg-[var(--surface)]"
         >
           <RewriteStatusStepper article={article} runningPassIndex={runningPassIndex} passes={passes} />
 

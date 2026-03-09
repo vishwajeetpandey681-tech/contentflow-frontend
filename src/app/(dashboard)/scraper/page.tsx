@@ -127,9 +127,9 @@ export default function ScraperPage() {
     <div className="scraper-page flex flex-1 flex-col overflow-hidden lg:flex-row" style={{ background: 'var(--bg)' }}>
       {/* Left — Library sidebar: full-width when Library tab; collapsible when Active tab */}
       {sourcesSubTab === 'library' ? (
-        <div className="scraper-library flex flex-1 flex-col min-w-0 [&_.scraper-library-inner]:!max-h-none" style={{ borderRight: '1px solid var(--border)' }}>
+        <div className="scraper-library scraper-library-standalone flex flex-1 flex-col min-w-0 [&_.scraper-library-inner]:!max-h-none" style={{ borderRight: '1px solid var(--border)' }}>
           <div className="scraper-library-inner flex-1 min-h-0 flex flex-col overflow-hidden">
-            <SourceLibrarySidebar existingUrls={existingUrls} onAdded={refresh} />
+            <SourceLibrarySidebar existingUrls={existingUrls} onAdded={refresh} hideTitle />
           </div>
         </div>
       ) : sourcesSubTab === 'active' ? (
@@ -232,9 +232,6 @@ export default function ScraperPage() {
                 <Rss size={18} color="#fff" />
               </div>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em' }}>
-                  Active sources
-                </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
                   {filteredSources.length}{channelFilter || categoryFilter || searchQuery ? ` / ${sources.length}` : ''} feeds
                 </div>

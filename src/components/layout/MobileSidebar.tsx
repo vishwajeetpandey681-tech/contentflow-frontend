@@ -232,7 +232,7 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
                 className="mt-3 pt-2 text-center text-[10px] leading-snug"
                 style={{ borderTop: '1px solid var(--border)', color: 'var(--text-dim)' }}
               >
-                Idea & developed by <strong style={{ color: 'var(--text-muted)' }}>Vishwajeet Pandey</strong>
+                All Right Is Reserved 2026
               </div>
             </div>
           </div>

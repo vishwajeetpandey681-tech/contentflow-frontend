@@ -356,7 +356,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
           textAlign: 'center',
           lineHeight: 1.4,
         }}>
-          Idea & developed by <strong style={{ color: 'var(--text-muted)' }}>Vishwajeet Pandey</strong>
+          All Right Is Reserved 2026
         </div>
       </div>
     </aside>

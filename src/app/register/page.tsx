@@ -259,7 +259,7 @@ function RegisterForm() {
           </Link>
         </p>
         <p style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-dim)', textAlign: 'center' }}>
-          Idea & developed by <strong style={{ color: 'var(--text-muted)' }}>Vishwajeet Pandey</strong>
+          All Right Is Reserved 2026
         </p>
       </div>
     </div>

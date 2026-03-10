@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Rss, Inbox, Settings, Newspaper, Zap, LogOut, X, User, Users } from 'lucide-react'
+import { Rss, Inbox, Settings, Newspaper, Zap, LogOut, X, User, Users, FolderOpen } from 'lucide-react'
 import { useSources } from '@/hooks/useSources'
 import { useStats } from '@/hooks/useStats'
 import { useAuthStore } from '@/lib/auth-store'
@@ -21,6 +21,7 @@ const navItems: Array<{
   {
     section: 'Publishing',
     items: [
+      { label: 'File Manager', href: '/files/', icon: FolderOpen },
       { label: 'WordPress', href: '/wordpress/', icon: Newspaper },
       { label: 'Social',    href: '/social',    icon: Zap, soon: true },
     ],

@@ -4,7 +4,7 @@ import { getStoredToken, useAuthStore } from './auth-store'
 
 const getApiBase = () => {
   if (typeof window !== 'undefined') return '/api'
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+  return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4500/api'
 }
 
 export const api = axios.create({
@@ -203,6 +203,27 @@ export const wpMetaApi = {
       file,
       { headers: { 'Content-Type': file.type || 'image/webp' }, timeout: 60000 }
     ).then(r => r.data.data),
+}
+
+export interface WpMediaItem {
+  id: number
+  date: string
+  title: string
+  source_url: string
+  mime_type: string
+  alt_text: string
+}
+
+export const mediaApi = {
+  list: (opts?: { siteId?: string; page?: number; per_page?: number; search?: string }) =>
+    api.get<{ data: { items: WpMediaItem[]; total: number } }>('/settings/wordpress/media', {
+      params: { siteId: opts?.siteId, page: opts?.page ?? 1, per_page: opts?.per_page ?? 24, search: opts?.search },
+    }).then(r => r.data.data),
+  delete: (id: number, siteId?: string) =>
+    api.delete<{ data: { deleted: boolean; id: number } }>(`/settings/wordpress/media/${id}`, { params: { siteId } }).then(r => r.data.data),
+  fetchFromUrl: (url: string, siteId?: string) =>
+    api.post<{ data: { id: number; url: string } }>('/settings/wordpress/media/fetch', { url }, { params: { siteId } }).then(r => r.data.data),
+  upload: (file: File, siteId?: string) => wpMetaApi.uploadImage(file, siteId),
 }
 
 export interface WpFieldMapEntry {

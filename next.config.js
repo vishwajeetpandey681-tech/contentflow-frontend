@@ -42,7 +42,7 @@ const nextConfig = {
   },
 
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001/api'
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4500/api'
     const target = apiUrl.replace(/\/api\/?$/, '')
     return [
       { source: '/api/:path*', destination: `${target}/api/:path*` },

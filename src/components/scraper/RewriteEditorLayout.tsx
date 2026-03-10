@@ -32,6 +32,7 @@ interface RewriteEditorLayoutProps {
   onReject?: () => Promise<void>
   onBack: () => void
   onRerunAll: () => void
+  onFetchAndRerun?: () => Promise<void>
   onPublishClick: () => void
   onSwitchToCards?: () => void
   onReleaseArticle?: () => void
@@ -61,6 +62,7 @@ export function RewriteEditorLayout({
   onReject,
   onBack,
   onRerunAll,
+  onFetchAndRerun,
   onPublishClick,
   onSwitchToCards,
   onReleaseArticle,
@@ -177,6 +179,26 @@ export function RewriteEditorLayout({
           <RotateCw size={12} />
           Re-run All
         </button>
+        {onFetchAndRerun && (
+          <button
+            onClick={onFetchAndRerun}
+            className="lg:hidden"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              fontSize: 11,
+              background: 'var(--surface)',
+              color: 'var(--text-muted)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              cursor: 'pointer',
+            }}
+          >
+            Fetch & Re-run
+          </button>
+        )}
         <div style={{ flex: 1 }} />
         <button
           onClick={onPublishClick}
@@ -202,10 +224,12 @@ export function RewriteEditorLayout({
       </div>
 
       <div className="rewrite-editor-layout flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
-        {/* Main content area - WordPress editor style (scrollable on mobile) */}
-        <div
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 lg:p-6 flex flex-col gap-5 min-w-0"
-        >
+        {/* Mobile: single scroll for Content + Settings; Desktop: two columns */}
+        <div className="rewrite-editor-mobile-scroll flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden lg:flex-row lg:overflow-hidden">
+          {/* Main content area */}
+          <div
+            className="rewrite-editor-main flex-1 min-h-0 overflow-x-hidden px-4 pt-2 pb-6 lg:px-6 lg:pt-4 lg:pb-6 flex flex-col gap-4 min-w-0 lg:overflow-y-auto"
+          >
           {/* Article info badge */}
           {article.source?.name && (
             <span
@@ -416,9 +440,9 @@ export function RewriteEditorLayout({
           )}
         </div>
 
-        {/* Right sidebar - Meta boxes (stacks below on mobile, scrollable) */}
+        {/* Right sidebar - Meta boxes (stacks below on mobile, scrolls with parent; independent scroll on desktop) */}
         <div
-          className="rewrite-editor-sidebar w-full lg:w-[320px] lg:flex-shrink-0 min-h-0 lg:border-l border-t lg:border-t-0 border-[var(--border)] p-4 overflow-y-auto overflow-x-hidden bg-[var(--surface)]"
+          className="rewrite-editor-sidebar w-full lg:w-[320px] lg:flex-shrink-0 min-h-0 lg:border-l border-t lg:border-t-0 border-[var(--border)] px-4 pt-3 pb-4 overflow-x-hidden bg-[var(--surface)] lg:overflow-y-auto"
         >
           <RewriteStatusStepper article={article} runningPassIndex={runningPassIndex} passes={passes} />
 
@@ -589,6 +613,7 @@ export function RewriteEditorLayout({
               onArticleUpdated={onArticleUpdated}
             />
           </div>
+        </div>
         </div>
       </div>
     </div>

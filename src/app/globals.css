@@ -80,9 +80,13 @@
   .inbox-toolbar input[type="datetime-local"] { max-width: 100px !important; }
 }
 
-/* Mobile: Rewrite editor - stack sidebar below content, enable scroll */
+/* Mobile: Rewrite editor - single scroll for Content + Settings */
 .rewrite-editor-layout {
   flex-direction: row;
+}
+.rewrite-editor-mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 .rewrite-editor-layout .overflow-y-auto,
 .rewrite-editor-sidebar.overflow-y-auto {
@@ -94,13 +98,22 @@
     flex-direction: column;
     min-height: 0;
   }
+  .rewrite-editor-mobile-scroll {
+    touch-action: pan-y;
+    overflow-y: scroll !important;
+  }
   .rewrite-editor-sidebar {
     width: 100% !important;
     max-width: none !important;
     border-left: none !important;
     border-top: 1px solid var(--border) !important;
+    flex-shrink: 0;
   }
-  .rewrite-editor-layout > div:first-child { padding: 16px !important; min-height: 0; }
+  /* Main content & sidebar: natural height in single scroll */
+  .rewrite-editor-main {
+    flex: 0 0 auto !important;
+    min-height: auto !important;
+  }
 }
 @media (max-width: 600px) {
   .rewrite-topbar { flex-wrap: wrap; padding: 10px 12px !important; gap: 8 !important; }
@@ -108,16 +121,20 @@
 }
 
 /* Mobile: Rewrite page - enable scroll on passes panel */
-.rewrite-page .overflow-y-auto {
+.rewrite-page .overflow-y-auto,
+.rewrite-mobile-scroll {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
 @media (max-width: 900px) {
   .rewrite-page .overflow-y-auto,
+  .rewrite-mobile-scroll,
+  .rewrite-editor-mobile-scroll,
+  .rewrite-editor-layout.overflow-y-auto,
   .rewrite-editor-layout .overflow-y-auto,
   .rewrite-editor-sidebar.overflow-y-auto {
     touch-action: pan-y;
-    overflow-y: scroll; /* force scroll for reliable touch on iOS */
+    overflow-y: scroll !important; /* force scroll for reliable touch on iOS */
   }
 }
 
@@ -130,6 +147,26 @@
 @media (max-width: 767px) {
   .article-card .flex.flex-row { flex-wrap: wrap; }
   .article-card-actions { flex-basis: 100% !important; flex-direction: row !important; flex-wrap: wrap !important; justify-content: flex-start !important; align-items: center !important; gap: 8px !important; padding-top: 8px !important; margin-top: 8px !important; border-top: 1px solid var(--border) !important; }
+}
+
+/* Library tab — full-width grid, responsive columns */
+.scraper-library-grid {
+  width: 100%;
+}
+.library-source-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr; /* mobile default */
+}
+@media (min-width: 640px) {
+  .library-source-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1024px) {
+  .library-source-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 /* Mobile: Sources page - stack layout, no duplication */

@@ -592,6 +592,7 @@ export default function RewritePage() {
         onReject={handleReject}
         onBack={() => router.push('/scraper/inbox/')}
         onRerunAll={handleRerunAll}
+        onFetchAndRerun={handleStartWithFetch}
         onSwitchToCards={() => setViewMode('cards')}
         onReleaseArticle={handleReleaseArticle}
         lockedByMe={lockedByMe}
@@ -634,9 +635,10 @@ export default function RewritePage() {
       </div>
 
       <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
-        {/* Passes panel - scrollable on mobile */}
+        {/* Mobile: single scroll container for passes + publish; Desktop: passes panel only */}
         <div
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-4"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden lg:overflow-y-auto p-4 flex flex-col gap-4 rewrite-mobile-scroll"
+          style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
         >
           <div
             style={{
@@ -1090,6 +1092,26 @@ export default function RewritePage() {
           ))}
         </div>
 
+        {/* Mobile: publish panel inside scroll container so it's reachable */}
+        <div className="lg:hidden" style={{ padding: '0 0 16px' }}>
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: '1.5px',
+              textTransform: 'uppercase',
+              color: 'var(--text-dim)',
+              fontFamily: 'Geist Mono, monospace',
+              marginBottom: 12,
+            }}
+          >
+            ARTICLE STATUS
+          </div>
+          <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
+          <div style={{ marginTop: 12 }}>
+            <WPPublishPanel articleId={articleId} rewrite={rewrite} article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined} wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} onArticleUpdated={mutateArticle} />
+          </div>
+        </div>
+
         {/* Publish panel - desktop */}
         <div
           className="hidden lg:block"
@@ -1129,25 +1151,7 @@ export default function RewritePage() {
         </div>
       </div>
 
-      {/* Mobile: publish panel + sticky bottom bar */}
-      <div className="lg:hidden" style={{ padding: '0 16px 16px' }}>
-        <div
-          style={{
-            fontSize: 10,
-            letterSpacing: '1.5px',
-            textTransform: 'uppercase',
-            color: 'var(--text-dim)',
-            fontFamily: 'Geist Mono, monospace',
-            marginBottom: 12,
-          }}
-        >
-          ARTICLE STATUS
-        </div>
-        <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
-        <div style={{ marginTop: 12 }}>
-          <WPPublishPanel articleId={articleId} rewrite={rewrite} article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined} wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} onArticleUpdated={mutateArticle} />
-        </div>
-      </div>
+      {/* Mobile: sticky bottom bar — Start rewrite / Fetch when needed; Re-run & Quick Draft when passes exist */}
       <div
         className="lg:hidden"
         style={{
@@ -1155,6 +1159,7 @@ export default function RewritePage() {
           bottom: 0,
           zIndex: 20,
           padding: '12px 16px',
+          paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
           background: 'var(--bg)',
           borderTop: '1px solid var(--border-subtle)',
           display: 'flex',
@@ -1162,59 +1167,115 @@ export default function RewritePage() {
           gap: 8,
         }}
       >
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={handleRerunAll}
-            style={{
-              flex: 1,
-              padding: 10,
-              fontSize: 12,
-              background: 'transparent',
-              color: 'var(--text-muted)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              cursor: 'pointer',
-            }}
-          >
-            ↺ Re-run All
-          </button>
-          <button
-            onClick={handleQuickDraft}
-            disabled={!allDone || quickDraftLoading}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              padding: 10,
-              fontSize: 12,
-              fontWeight: 600,
-              background: allDone ? 'var(--green)' : 'var(--surface)',
-              color: allDone ? '#fff' : 'var(--text-dim)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              opacity: allDone && !quickDraftLoading ? 1 : 0.45,
-              cursor: allDone && !quickDraftLoading ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {quickDraftLoading ? (
-              <Loader2 size={16} style={{ animation: 'spin 0.6s linear infinite' }} />
-            ) : (
-              'Quick Draft →'
-            )}
-          </button>
-        </div>
-        <div
-          style={{
-            textAlign: 'center',
-            fontSize: 10,
-            fontFamily: 'Geist Mono, monospace',
-            color: 'var(--text-muted)',
-          }}
-        >
-          Publishes as draft
-        </div>
+        {(article.status === 'APPROVED' || article.status === 'EXPORTED') && (passes.length === 0 || passes.every(p => p.status === 'IDLE')) ? (
+          <>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                onClick={handleStartRewrite}
+                disabled={rewriteLoading}
+                style={{
+                  flex: 1,
+                  minWidth: 120,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: 12,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  background: 'var(--accent-glow)',
+                  color: 'var(--accent-light)',
+                  border: '1px solid rgba(124,58,237,0.3)',
+                  borderRadius: 8,
+                  cursor: rewriteLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {rewriteLoading ? <Loader2 size={16} style={{ animation: 'spin 0.6s linear infinite' }} /> : null}
+                Start rewrite
+              </button>
+              <button
+                onClick={handleStartWithFetch}
+                disabled={rewriteLoading}
+                style={{
+                  flex: 1,
+                  minWidth: 120,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: 12,
+                  fontSize: 13,
+                  background: 'var(--surface)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  cursor: rewriteLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Fetch full article & Start rewrite
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
+              Choose language & format above, then start
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleRerunAll}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  fontSize: 12,
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                }}
+              >
+                ↺ Re-run All
+              </button>
+              <button
+                onClick={handleQuickDraft}
+                disabled={!allDone || quickDraftLoading}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: 10,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: allDone ? 'var(--green)' : 'var(--surface)',
+                  color: allDone ? '#fff' : 'var(--text-dim)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  opacity: allDone && !quickDraftLoading ? 1 : 0.45,
+                  cursor: allDone && !quickDraftLoading ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {quickDraftLoading ? (
+                  <Loader2 size={16} style={{ animation: 'spin 0.6s linear infinite' }} />
+                ) : (
+                  'Quick Draft →'
+                )}
+              </button>
+            </div>
+            <div
+              style={{
+                textAlign: 'center',
+                fontSize: 10,
+                fontFamily: 'Geist Mono, monospace',
+                color: 'var(--text-muted)',
+              }}
+            >
+              Publishes as draft
+            </div>
+          </>
+        )}
       </div>
 
       {lockModal}

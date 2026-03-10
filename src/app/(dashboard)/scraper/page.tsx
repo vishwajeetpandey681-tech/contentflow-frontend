@@ -8,7 +8,7 @@ import { sourcesApi, logsApi } from '@/lib/api'
 import { SourceCard } from '@/components/scraper/SourceCard'
 import { AddSourceForm } from '@/components/scraper/AddSourceForm'
 import { EditSourceForm } from '@/components/scraper/EditSourceForm'
-import { SourceLibrarySidebar } from '@/components/scraper/SourceLibrarySidebar'
+import { SourceLibraryGrid } from '@/components/scraper/SourceLibraryGrid'
 import { Spinner } from '@/components/ui/Spinner'
 import toast from 'react-hot-toast'
 import { useUIStore } from '@/lib/ui-store'
@@ -124,12 +124,10 @@ export default function ScraperPage() {
 
   return (
     <div className="scraper-page flex flex-1 flex-col overflow-hidden lg:flex-row" data-sources-tab={sourcesSubTab} style={{ background: 'var(--bg)' }}>
-      {/* Left — Library sidebar: only when Library tab */}
+      {/* Library tab — full-width grid layout */}
       {sourcesSubTab === 'library' && (
-        <div className="scraper-library scraper-library-standalone flex flex-1 flex-col min-w-0 [&_.scraper-library-inner]:!max-h-none" style={{ borderRight: '1px solid var(--border)' }}>
-          <div className="scraper-library-inner flex-1 min-h-0 flex flex-col overflow-hidden">
-            <SourceLibrarySidebar existingUrls={existingUrls} onAdded={refresh} hideTitle />
-          </div>
+        <div className="scraper-library-grid flex flex-1 min-w-0 overflow-hidden">
+          <SourceLibraryGrid existingUrls={existingUrls} onAdded={refresh} />
         </div>
       )}
 

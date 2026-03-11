@@ -203,10 +203,41 @@ sudo ufw enable
 
 ---
 
+## Update VPS after git push (changes not visible until you do this)
+
+Pulling alone is not enough: the frontend must be **rebuilt** and PM2 **restarted**, or you will still see the old version.
+
+**Option A — one command (recommended):**
+```bash
+cd /var/www/csr-studio
+bash frontend/scripts/update-vps.sh
+```
+
+**Option B — step by step:**
+```bash
+cd /var/www/csr-studio/backend
+git pull origin main
+npm install --production
+
+cd /var/www/csr-studio/frontend
+git pull origin main
+npm install
+npm run build
+
+cd /var/www/csr-studio
+pm2 restart all
+pm2 save
+```
+
+Then hard-refresh the browser (Ctrl+Shift+R or Cmd+Shift+R) to avoid cached assets.
+
+---
+
 ## Quick Commands
 
 | Action | Command |
 |--------|---------|
+| **Update from Git** | `cd /var/www/csr-studio && bash frontend/scripts/update-vps.sh` |
 | View logs | `pm2 logs` |
 | Restart all | `pm2 restart all` |
 | Restart API | `pm2 restart csr-studio-api` |

@@ -24,7 +24,9 @@ export function SourceCard({
   isScraping = false,
 }: SourceCardProps) {
   const counts = source.counts || { pending: 0, approved: 0, rejected: 0, failed: 0, total: 0 }
-  const dotColor = source.isBlocked ? '#ef4444' : source.isActive ? '#22c55e' : '#52525b'
+  const health = source.health
+  const dotColor = source.isBlocked ? '#ef4444' : health?.healthStatus === 'red' ? '#ef4444' : health?.healthStatus === 'yellow' ? '#eab308' : source.isActive ? '#22c55e' : '#52525b'
+  const healthTitle = health ? `Last: ${health.lastFetchedAt ? timeAgo(health.lastFetchedAt) : 'Never'}${health.successRate != null ? ` · Success: ${Math.round(health.successRate * 100)}%` : ''}${health.avgArticlesPerFetch != null ? ` · Avg: ${health.avgArticlesPerFetch} articles` : ''}${health.alert ? ' · Alert: no fetch in 24h' : ''}` : undefined
 
   return (
     <div
@@ -59,8 +61,9 @@ export function SourceCard({
         }
       }}
     >
-      {/* Status dot */}
+      {/* Status dot — health indicator */}
       <div
+        title={healthTitle || (source.lastScrapedAt ? timeAgo(source.lastScrapedAt) : 'Never scraped')}
         style={{
           width: 7,
           height: 7,
@@ -133,14 +136,15 @@ export function SourceCard({
         )}
       </div>
 
-      {/* Last scraped */}
+      {/* Last scraped / health */}
       <span
         className="hidden lg:block"
         style={{ fontSize: 10, color: 'var(--text-dim)', flexShrink: 0, fontFamily: 'Geist Mono, monospace', minWidth: 40, textAlign: 'right' }}
-        title={source.lastScrapedAt ? timeAgo(source.lastScrapedAt) : 'Never scraped'}
+        title={healthTitle || (source.lastScrapedAt ? timeAgo(source.lastScrapedAt) : 'Never scraped')}
       >
         {source.isBlocked
           ? <span style={{ color: 'var(--red)' }}>blocked</span>
+          : health?.alert && !source.lastScrapedAt ? <span style={{ color: 'var(--amber)' }}>—</span>
           : source.lastScrapedAt ? timeAgo(source.lastScrapedAt) : '—'}
       </span>
 

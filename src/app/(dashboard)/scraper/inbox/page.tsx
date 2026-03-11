@@ -24,7 +24,8 @@ const DATE_PRESETS = [
 ] as const
 import { useInbox } from '@/hooks/useInbox'
 import { useStats } from '@/hooks/useStats'
-import { inboxApi } from '@/lib/api'
+import { useSources } from '@/hooks/useSources'
+import { inboxApi, rewriteApi } from '@/lib/api'
 import { InboxStats } from '@/components/scraper/InboxStats'
 import { ArticleCard } from '@/components/scraper/ArticleCard'
 import { Spinner } from '@/components/ui/Spinner'
@@ -66,6 +67,8 @@ function InboxTabContent({
   selectedIds,
   onToggleSelect,
   onSelectAll,
+  onMarkRead,
+  onMarkStar,
 }: {
   status: ArticleStatus | 'published'
   search: string
@@ -88,6 +91,8 @@ function InboxTabContent({
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
   onSelectAll?: (checked: boolean) => void
+  onMarkRead?: (id: string, read: boolean) => void
+  onMarkStar?: (id: string, starred: boolean) => void
 }) {
   const [loadingHint, setLoadingHint] = useState(false)
   const showActions = status === 'PENDING_REVIEW'
@@ -282,6 +287,8 @@ function InboxTabContent({
               onRetryRewrite={onRetryRewrite}
               onUpdatePost={onUpdatePost}
               onUnlink={onUnlink}
+              onMarkRead={onMarkRead}
+              onMarkStar={onMarkStar}
               showActions={showActions}
               showPublishedActions={showPublishedActions}
               selected={selectedIds?.has(article.id)}
@@ -331,6 +338,12 @@ export default function InboxPage() {
   const [approveSelectedLoading, setApproveSelectedLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [filterOpen, setFilterOpen] = useState(false)
+  const [sourceIdFilter, setSourceIdFilter] = useState('')
+  const [isReadFilter, setIsReadFilter] = useState<boolean | undefined>(undefined)
+  const [isStarredFilter, setIsStarredFilter] = useState<boolean | undefined>(undefined)
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [batchStatus, setBatchStatus] = useState<{ total: number; pending: number; running: number; done: number; failed: number } | null>(null)
+  const batchPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     setSelectedIds(new Set())
@@ -372,6 +385,7 @@ export default function InboxPage() {
   }
 
   const { stats = { pending: 0, approved: 0, rejected: 0, failed: 0, published: 0 }, refresh: refreshStats } = useStats()
+  const { sources } = useSources()
   const isPublishedTab = activeTab === 'published'
   const { articles, total, loading, loadingMore, error, hasMore, loadMore, refresh } = useInbox(
     isPublishedTab ? 'APPROVED' : activeTab,
@@ -381,7 +395,10 @@ export default function InboxPage() {
     fromDate,
     toDate,
     isPublishedTab,
-    activeSourcesOnly
+    activeSourcesOnly,
+    sourceIdFilter,
+    isReadFilter,
+    isStarredFilter
   )
 
   const handleApprove = async (id: string) => {
@@ -459,6 +476,71 @@ export default function InboxPage() {
     if (activeTab !== 'PENDING_REVIEW') return
     setSelectedIds(checked ? new Set(articles.map(a => a.id)) : new Set())
   }
+
+  const handleMarkRead = async (id: string, read: boolean) => {
+    try {
+      await inboxApi.markRead(id, read)
+      refresh()
+    } catch { /* ignore */ }
+  }
+  const handleMarkStar = async (id: string, starred: boolean) => {
+    try {
+      await inboxApi.markStar(id, starred)
+      refresh()
+    } catch { /* ignore */ }
+  }
+
+  const handleBulk = async (action: 'delete' | 'rewrite' | 'markRead' | 'markUnread' | 'star' | 'unstar') => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    if (action === 'rewrite') {
+      try {
+        await rewriteApi.batch.queue(ids)
+        setSelectedIds(new Set())
+        setBatchStatus({ total: ids.length, pending: ids.length, running: 0, done: 0, failed: 0 })
+        toast.success(`Queued ${ids.length} article(s) for rewrite`)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to queue batch')
+      }
+      return
+    }
+    setBulkLoading(true)
+    try {
+      const res = await inboxApi.bulk(action, ids)
+      const d = res.data?.data
+      const processed = (d as { processed?: number })?.processed ?? 0
+      const errors = (d as { errors?: { id: string; error: string }[] })?.errors ?? []
+      if (errors.length > 0) toast.error(`${processed} done, ${errors.length} failed`)
+      else toast.success(processed > 0 ? `${action} applied to ${processed} article(s)` : 'Done')
+      setSelectedIds(new Set())
+      refresh()
+      refreshStats()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Bulk action failed')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!batchStatus || (batchStatus.pending === 0 && batchStatus.running === 0)) return
+    const poll = () => {
+      rewriteApi.batch.status().then((d) => {
+        setBatchStatus({ total: d.total, pending: d.pending, running: d.running, done: d.done, failed: d.failed })
+        if (d.running === 0 && d.pending === 0) {
+          if (batchPollRef.current) clearInterval(batchPollRef.current)
+          batchPollRef.current = null
+          setBatchStatus(null)
+          refresh()
+          refreshStats()
+          toast.success(`Batch complete: ${d.done} done${d.failed > 0 ? `, ${d.failed} failed` : ''}`)
+        }
+      }).catch(() => {})
+    }
+    batchPollRef.current = setInterval(poll, 2000)
+    poll()
+    return () => { if (batchPollRef.current) clearInterval(batchPollRef.current) }
+  }, [batchStatus?.pending, batchStatus?.running])
 
   const handleSearch = (v: string) => {
     setSearch(v)
@@ -722,6 +804,42 @@ export default function InboxPage() {
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
+        <select
+          value={sourceIdFilter}
+          onChange={e => setSourceIdFilter(e.target.value)}
+          style={{
+            padding: '6px 10px',
+            fontSize: 11,
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            color: 'var(--text)',
+            minWidth: 120,
+          }}
+        >
+          <option value="">All sources</option>
+          {sources.map(s => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <select
+          value={isReadFilter === undefined ? '' : isReadFilter ? 'read' : 'unread'}
+          onChange={e => { const v = e.target.value; setIsReadFilter(v === '' ? undefined : v === 'read'); }}
+          style={{ padding: '6px 10px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', minWidth: 90 }}
+        >
+          <option value="">All read</option>
+          <option value="read">Read</option>
+          <option value="unread">Unread</option>
+        </select>
+        <select
+          value={isStarredFilter === undefined ? '' : isStarredFilter ? 'starred' : 'no'}
+          onChange={e => { const v = e.target.value; setIsStarredFilter(v === '' ? undefined : v === 'starred'); }}
+          style={{ padding: '6px 10px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', minWidth: 90 }}
+        >
+          <option value="">All starred</option>
+          <option value="starred">Starred</option>
+          <option value="no">Not starred</option>
+        </select>
         <div className="flex items-center gap-2">
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Show</span>
           <select
@@ -747,6 +865,31 @@ export default function InboxPage() {
         </div>
         </div>
       </div>
+
+      {/* Bulk actions bar */}
+      {selectedIds.size > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-2 px-3 py-2 md:px-4"
+          style={{ background: 'var(--accent-subtle)', borderBottom: '1px solid var(--border)' }}
+        >
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 8 }}>{selectedIds.size} selected</span>
+          <button type="button" onClick={() => handleBulk('markRead')} disabled={bulkLoading} style={{ padding: '4px 10px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', cursor: bulkLoading ? 'not-allowed' : 'pointer' }}>Mark read</button>
+          <button type="button" onClick={() => handleBulk('markUnread')} disabled={bulkLoading} style={{ padding: '4px 10px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', cursor: bulkLoading ? 'not-allowed' : 'pointer' }}>Mark unread</button>
+          <button type="button" onClick={() => handleBulk('star')} disabled={bulkLoading} style={{ padding: '4px 10px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', cursor: bulkLoading ? 'not-allowed' : 'pointer' }}>Star</button>
+          <button type="button" onClick={() => handleBulk('unstar')} disabled={bulkLoading} style={{ padding: '4px 10px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', cursor: bulkLoading ? 'not-allowed' : 'pointer' }}>Unstar</button>
+          <button type="button" onClick={() => handleBulk('rewrite')} disabled={bulkLoading} style={{ padding: '4px 10px', fontSize: 11, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 6, cursor: bulkLoading ? 'not-allowed' : 'pointer' }}>Rewrite all</button>
+          <button type="button" onClick={() => handleBulk('delete')} disabled={bulkLoading} style={{ padding: '4px 10px', fontSize: 11, background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, cursor: bulkLoading ? 'not-allowed' : 'pointer' }}>Delete</button>
+        </div>
+      )}
+
+      {batchStatus != null && batchStatus.total > 0 && (
+        <div style={{ padding: '8px 12px', background: 'var(--accent-subtle)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Batch rewrite: {batchStatus.done + batchStatus.failed}/{batchStatus.total} ({batchStatus.running ? '1 running…' : 'queued'})</span>
+          <div style={{ flex: 1, minWidth: 120, height: 6, background: 'var(--surface)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ width: `${batchStatus.total ? ((batchStatus.done + batchStatus.failed) / batchStatus.total) * 100 : 0}%`, height: '100%', background: 'var(--green)', transition: 'width 0.3s ease' }} />
+          </div>
+        </div>
+      )}
 
       {/* List - render based on active tab */}
       {TAB_STATUSES.map(tab => (
@@ -774,6 +917,8 @@ export default function InboxPage() {
             selectedIds={activeTab === 'PENDING_REVIEW' ? selectedIds : undefined}
             onToggleSelect={activeTab === 'PENDING_REVIEW' ? handleToggleSelect : undefined}
             onSelectAll={activeTab === 'PENDING_REVIEW' ? handleSelectAll : undefined}
+            onMarkRead={handleMarkRead}
+            onMarkStar={handleMarkStar}
           />
         )
       ))}

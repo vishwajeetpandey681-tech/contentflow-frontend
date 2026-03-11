@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Plus, X } from 'lucide-react'
 import { sourcesApi } from '@/lib/api'
 import type { CreateSourceInput, SourceType, OutputLanguage, ArticleCategory } from '@/types/source'
-import { ARTICLE_CATEGORIES, CRON_PRESETS } from '@/types/source'
+import { ARTICLE_CATEGORIES, CRON_PRESETS, FETCH_INTERVAL_PRESETS } from '@/types/source'
 import { REWRITE_LANGUAGES } from '@/lib/rewrite-options'
 import toast from 'react-hot-toast'
 
@@ -16,12 +16,14 @@ interface AddSourceFormProps {
 
 const SOURCE_TYPES: SourceType[] = ['RSS', 'ATOM', 'HTML_LISTING', 'JSON_FEED']
 
-function AutoValidateUrl({ url, onDetected }: { url: string; onDetected: (type: string) => void }) {
+function AutoValidateUrl({ url, onDetected, onMetadata }: { url: string; onDetected: (type: string) => void; onMetadata?: (meta: { title: string | null; description: string | null; favicon: string | null }) => void }) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onDetectedRef = useRef(onDetected)
+  const onMetadataRef = useRef(onMetadata)
   onDetectedRef.current = onDetected
+  onMetadataRef.current = onMetadata
 
   useEffect(() => {
     if (!url.trim() || !url.startsWith('http')) {
@@ -38,9 +40,10 @@ function AutoValidateUrl({ url, onDetected }: { url: string; onDetected: (type: 
       setResult(null)
       try {
         const res = await sourcesApi.validateUrl(firstUrl)
-        const data = res.data as { ok?: boolean; type?: string | null; error?: string; note?: string }
+        const data = res.data as { ok?: boolean; type?: string | null; error?: string; note?: string; metadata?: { title: string | null; description: string | null; favicon: string | null } }
         if (data.ok && data.type) {
           onDetectedRef.current(data.type)
+          if (data.metadata && onMetadataRef.current) onMetadataRef.current(data.metadata)
           setResult(`Detected: ${data.type}`)
         } else {
           setResult(data.error || 'Unknown format')
@@ -89,12 +92,18 @@ export function AddSourceForm({ onSuccess, onClose, inline = false }: AddSourceF
     type: 'RSS',
     maxPerRun: 20,
     cronSchedule: '0 */6 * * *',
+    fetchInterval: '',
     customPrompt: null,
     defaultOutputLanguage: null,
     channel: null,
     category: null,
+    keywordWhitelist: null,
+    keywordBlacklist: null,
+    minArticleLength: null,
+    maxArticleLength: null,
+    maxArticleAgeDays: null,
   })
-  const baseForm = { name: '', url: '', type: 'RSS' as const, maxPerRun: 20, cronSchedule: '0 */6 * * *', customPrompt: null as string | null, defaultOutputLanguage: null as OutputLanguage | null, channel: null as string | null, category: null as ArticleCategory | null }
+  const baseForm: CreateSourceInput = { name: '', url: '', type: 'RSS', maxPerRun: 20, cronSchedule: '0 */6 * * *', fetchInterval: '', customPrompt: null, defaultOutputLanguage: null, channel: null, category: null, keywordWhitelist: null, keywordBlacklist: null, minArticleLength: null, maxArticleLength: null, maxArticleAgeDays: null }
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -163,6 +172,7 @@ export function AddSourceForm({ onSuccess, onClose, inline = false }: AddSourceF
             <AutoValidateUrl
               url={form.url}
               onDetected={type => setForm(f => ({ ...f, type: type as SourceType }))}
+              onMetadata={meta => setForm(f => ({ ...f, name: (meta?.title || f.name || '').trim() || f.name, feedTitle: meta?.title || null, feedDescription: meta?.description || null, feedFavicon: meta?.favicon || null }))}
             />
           )}
         </div>
@@ -308,6 +318,58 @@ export function AddSourceForm({ onSuccess, onClose, inline = false }: AddSourceF
             display: cronCustomMode ? 'block' : 'none',
           }}
         />
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4 }}>
+          Fetch interval (preset)
+        </label>
+        <select
+          value={form.fetchInterval ?? ''}
+          onChange={e => setForm(f => ({ ...f, fetchInterval: e.target.value || '' }))}
+          style={inputStyle}
+        >
+          {FETCH_INTERVAL_PRESETS.map(p => (
+            <option key={p.value || 'manual'} value={p.value}>{p.label}</option>
+          ))}
+        </select>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4 }}>
+          Keyword whitelist (comma-separated; article must match one)
+        </label>
+        <input
+          type="text"
+          placeholder="e.g. cricket, IPL"
+          value={form.keywordWhitelist ?? ''}
+          onChange={e => setForm(f => ({ ...f, keywordWhitelist: e.target.value.trim() || null }))}
+          style={inputStyle}
+        />
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4 }}>
+          Keyword blacklist (comma-separated; exclude if matches)
+        </label>
+        <input
+          type="text"
+          placeholder="e.g. spoiler, opinion"
+          value={form.keywordBlacklist ?? ''}
+          onChange={e => setForm(f => ({ ...f, keywordBlacklist: e.target.value.trim() || null }))}
+          style={inputStyle}
+        />
+      </div>
+      <div className="flex gap-2" style={{ marginBottom: 10 }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4 }}>Min words</label>
+          <input type="number" min={0} placeholder="0" value={form.minArticleLength ?? ''} onChange={e => setForm(f => ({ ...f, minArticleLength: e.target.value === '' ? null : parseInt(e.target.value) || 0 }))} style={inputStyle} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4 }}>Max words</label>
+          <input type="number" min={0} placeholder="—" value={form.maxArticleLength ?? ''} onChange={e => setForm(f => ({ ...f, maxArticleLength: e.target.value === '' ? null : parseInt(e.target.value) || 0 }))} style={inputStyle} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4 }}>Max age (days)</label>
+          <input type="number" min={0} placeholder="—" value={form.maxArticleAgeDays ?? ''} onChange={e => setForm(f => ({ ...f, maxArticleAgeDays: e.target.value === '' ? null : parseInt(e.target.value) || 0 }))} style={inputStyle} />
+        </div>
       </div>
       <div className="flex gap-2" style={{ marginTop: 12 }}>
         <button

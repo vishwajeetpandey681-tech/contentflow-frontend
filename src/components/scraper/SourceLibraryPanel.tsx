@@ -1,10 +1,22 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { BookOpen, ChevronDown, ChevronRight } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, FileUp } from 'lucide-react'
 import { sourcesApi } from '@/lib/api'
 import { SOURCE_LIBRARY, CHANNELS, LIBRARY_CATEGORIES } from '@/lib/source-library'
 import toast from 'react-hot-toast'
+
+function parseCsvToSources(csv: string): { name: string; url: string; type?: string }[] {
+  const lines = csv.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  const out: { name: string; url: string; type?: string }[] = []
+  for (const line of lines) {
+    const parts = line.split(',').map(p => p.trim().replace(/^["']|["']$/g, ''))
+    if (parts.length >= 2) {
+      out.push({ name: parts[0], url: parts[1], type: parts[2] || undefined })
+    }
+  }
+  return out
+}
 
 interface SourceLibraryPanelProps {
   existingUrls: Set<string>
@@ -17,6 +29,8 @@ export function SourceLibraryPanel({ existingUrls, onAdded, defaultOpen = true }
   const [channelFilter, setChannelFilter] = useState<string>('')
   const [categoryFilter, setCategoryFilter] = useState<string>('')
   const [adding, setAdding] = useState<string | null>(null)
+  const [csvText, setCsvText] = useState('')
+  const [importing, setImporting] = useState(false)
 
   const filtered = useMemo(() => {
     return SOURCE_LIBRARY.filter(s => {
@@ -51,6 +65,31 @@ export function SourceLibraryPanel({ existingUrls, onAdded, defaultOpen = true }
       toast.error(err instanceof Error ? err.message : 'Failed to add')
     } finally {
       setAdding(null)
+    }
+  }
+
+  const handleImportCsv = async () => {
+    const sources = parseCsvToSources(csvText)
+    if (sources.length === 0) {
+      toast.error('Paste CSV with columns: name, url [, type]')
+      return
+    }
+    setImporting(true)
+    try {
+      const res = await sourcesApi.importSources(sources)
+      const d = res.data?.data as { created?: number; errors?: { index: number; name: string; error: string }[] }
+      const created = d?.created ?? 0
+      const errors = d?.errors ?? []
+      if (created > 0) toast.success(`Imported ${created} source(s)`)
+      if (errors.length > 0) toast.error(`${errors.length} row(s) failed`)
+      if (created > 0) {
+        setCsvText('')
+        onAdded()
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Import failed')
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -97,6 +136,37 @@ export function SourceLibraryPanel({ existingUrls, onAdded, defaultOpen = true }
       </button>
       {open && (
         <div style={{ padding: '0 14px 14px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ marginTop: 12, marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
+              <FileUp size={12} />
+              Import CSV (name, url [, type])
+            </div>
+            <textarea
+              placeholder="Source Name, https://example.com/feed.xml, RSS"
+              value={csvText}
+              onChange={e => setCsvText(e.target.value)}
+              rows={3}
+              style={{ width: '100%', padding: 8, fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', resize: 'vertical' }}
+            />
+            <button
+              type="button"
+              onClick={handleImportCsv}
+              disabled={importing || !csvText.trim()}
+              style={{
+                marginTop: 6,
+                padding: '6px 12px',
+                fontSize: 11,
+                fontWeight: 600,
+                background: (importing || !csvText.trim()) ? 'var(--card)' : 'var(--accent)',
+                color: (importing || !csvText.trim()) ? 'var(--text-dim)' : '#fff',
+                border: 'none',
+                borderRadius: 6,
+                cursor: (importing || !csvText.trim()) ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {importing ? 'Importing…' : 'Import'}
+            </button>
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, marginBottom: 12 }}>
             <select value={channelFilter} onChange={e => setChannelFilter(e.target.value)} style={inputStyle}>
               <option value="">All channels</option>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft, RotateCw, Send, Loader2, Eye, Code } from 'lucide-react'
 import { RichTextEditor } from './RichTextEditor'
 import { MetaBox } from './MetaBox'
+import { DiffView } from './DiffView'
 import { RewriteStatusStepper } from './RewriteStatusStepper'
 import { WPPublishPanel } from './WPPublishPanel'
 import type { ScraperArticle, ArticleRewrite, RewritePass } from '@/types/article'
@@ -91,7 +92,7 @@ export function RewriteEditorLayout({
 
   const [title, setTitle] = useState(article.title)
   const [slug, setSlug] = useState(article.title?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') ?? '')
-  const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual')
+  const [editorMode, setEditorMode] = useState<'visual' | 'code' | 'sideBySide' | 'changes'>('visual')
 
   useEffect(() => {
     const seoTitle = seoTitlePass?.output?.trim()
@@ -100,6 +101,7 @@ export function RewriteEditorLayout({
 
   const fullContent = fullPass?.output ?? ''
   const wordCountVal = wordCount(fullContent)
+  const originalContent = (article.fullContent || article.description || article.title || '').trim()
 
   return (
     <div className="rewrite-page flex flex-1 flex-col min-h-0 overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -355,18 +357,102 @@ export function RewriteEditorLayout({
                   <Code size={12} />
                   Code
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorMode('sideBySide')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    background: editorMode === 'sideBySide' ? 'var(--accent-glow)' : 'transparent',
+                    color: editorMode === 'sideBySide' ? 'var(--accent-light)' : 'var(--text-muted)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Side-by-side
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorMode('changes')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    background: editorMode === 'changes' ? 'var(--accent-glow)' : 'transparent',
+                    color: editorMode === 'changes' ? 'var(--accent-light)' : 'var(--text-muted)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Changes
+                </button>
               </div>
             </div>
 
             {fullPass && (
-              editorMode === 'visual' ? (
+              editorMode === 'sideBySide' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, minHeight: 320 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Original</div>
+                    <div
+                      style={{
+                        minHeight: 320,
+                        padding: 12,
+                        fontSize: 13,
+                        fontFamily: 'Geist Mono, monospace',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 8,
+                        color: 'var(--text)',
+                        overflow: 'auto',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {originalContent || '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Rewritten</div>
+                    <div
+                      style={{
+                        minHeight: 320,
+                        padding: 12,
+                        fontSize: 13,
+                        fontFamily: 'Geist Mono, monospace',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 8,
+                        color: 'var(--text)',
+                        overflow: 'auto',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {fullContent ? fullContent.replace(/<[^>]+>/g, ' ') : '—'}
+                    </div>
+                  </div>
+                </div>
+              ) : editorMode === 'changes' ? (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Highlight: <span style={{ background: 'rgba(34,197,94,0.25)', padding: '0 4px' }}>added</span> <span style={{ background: 'rgba(239,68,68,0.2)', textDecoration: 'line-through' }}>removed</span></div>
+                  <DiffView original={originalContent} rewritten={fullContent} mode="sentences" style={{ minHeight: 320 }} />
+                </div>
+              ) : editorMode === 'visual' ? (
                 <RichTextEditor
                   value={fullContent}
                   onChange={v => onOutputChange('full', v)}
                   disabled={fullPass.status === 'RUNNING'}
                   minHeight={320}
                 />
-              ) : (
+              ) : editorMode === 'code' ? (
                 <textarea
                   value={fullContent}
                   onChange={e => onOutputChange('full', e.target.value)}
@@ -385,7 +471,7 @@ export function RewriteEditorLayout({
                     resize: 'vertical',
                   }}
                 />
-              )
+              ) : null
             )}
           </div>
 

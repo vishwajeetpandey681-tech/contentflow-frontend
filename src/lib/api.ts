@@ -94,7 +94,9 @@ export const sourcesApi = {
   delete:  (id: string) => api.delete(`/sources/${id}`),
   trigger: (id: string) => api.post<{ data: { scraped: number; duplicatesSkipped?: number; fullFetched?: number; message?: string } }>(`/sources/${id}/trigger`, {}, { timeout: 120000 }),
   validateUrl: (url: string) =>
-    api.post<{ ok: boolean; type: string | null; error?: string; note?: string }>('/sources/validate-url', { url }, { timeout: 15000 }),
+    api.post<{ ok: boolean; type: string | null; error?: string; note?: string; metadata?: { title: string | null; description: string | null; favicon: string | null } }>('/sources/validate-url', { url }, { timeout: 15000 }),
+  importSources: (sources: { name: string; url: string; type?: string }[]) =>
+    api.post<{ data: { created: number; sources: unknown[]; errors: { index: number; name: string; error: string }[] } }>('/sources/import', { sources }, { timeout: 60000 }),
 }
 
 export interface ScrapeLogEntry {
@@ -127,6 +129,9 @@ export interface InboxListParams {
   toDate?: string
   published?: boolean
   activeSourcesOnly?: boolean
+  sourceId?: string
+  isRead?: boolean
+  isStarred?: boolean
 }
 
 export const inboxApi = {
@@ -137,6 +142,10 @@ export const inboxApi = {
     api.post(`/inbox/${id}/reject`, { rejectedBy: 'admin', reason }),
   delete:  (id: string)  => api.delete(`/inbox/${id}`),
   unlinkWpPublish: (id: string) => api.delete(`/inbox/${id}/wp-publish`),
+  markRead: (id: string, read: boolean) => api.patch(`/inbox/${id}/read`, { read }),
+  markStar: (id: string, starred: boolean) => api.patch(`/inbox/${id}/star`, { starred }),
+  bulk: (action: 'delete' | 'rewrite' | 'markRead' | 'markUnread' | 'star' | 'unstar', ids: string[]) =>
+    api.post<{ data: { processed: number; errors: { id: string; error: string }[] } }>('/inbox/bulk', { action, ids }, { timeout: 300000 }),
   stats: () => api.get('/inbox/meta/stats', { timeout: 6000 }),
   fetchFull: (id: string) => api.post(`/inbox/${id}/fetch`),
   extractImage: (id: string) => api.post<{ data: { image: string } }>(`/inbox/${id}/extract-image`).then(r => r.data.data),
@@ -158,6 +167,10 @@ export interface RewriteStartOpts {
   headingFormat?: string
   subheadingFormat?: string
   paragraphTag?: string
+  tone?: string
+  targetAudience?: string
+  customInstruction?: string
+  targetWordCount?: number
 }
 
 export const rewriteApi = {
@@ -170,6 +183,23 @@ export const rewriteApi = {
     api.put(`/rewrite/${articleId}/pass/${passId}`, { output }),
   updateCustomFooter: (articleId: string, customFooter: string | null) =>
     api.patch(`/rewrite/${articleId}`, { customFooter }),
+  quality:  (articleId: string) =>
+    api.get<{ data: import('@/types/article').RewriteQuality | null }>(`/rewrite/${articleId}/quality`).then(r => r.data.data),
+  versions: {
+    list:   (articleId: string) => api.get<{ data: import('@/types/article').RewriteVersion[] }>(`/rewrite/${articleId}/versions`).then(r => r.data.data),
+    save:   (articleId: string, label?: string) => api.post<{ data: import('@/types/article').RewriteVersion }>(`/rewrite/${articleId}/versions`, { label }),
+    restore: (articleId: string, versionId: string) => api.post(`/rewrite/${articleId}/versions/${versionId}/restore`),
+  },
+  suggestHeadlines: (articleId: string) =>
+    api.post<{ data: { headlines: string[] } }>(`/rewrite/${articleId}/suggest-headlines`).then(r => r.data.data),
+  suggestKeywords: (articleId: string) =>
+    api.post<{ data: { keywords: string[] } }>(`/rewrite/${articleId}/suggest-keywords`).then(r => r.data.data),
+  batch: {
+    queue: (ids: string[], opts?: Record<string, unknown>) =>
+      api.post<{ data: { queued: number; total: number } }>('/rewrite/batch/queue', { ids, opts }),
+    status: () =>
+      api.get<{ data: { queue: { id: string; articleId: string; status: string; error?: string; completedAt?: string }[]; total: number; pending: number; running: number; done: number; failed: number } }>('/rewrite/batch/status').then(r => r.data.data),
+  },
 }
 
 export const publishApi = {

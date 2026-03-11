@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, X, RotateCw, AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Loader2, Pencil, Unlink, Lock } from 'lucide-react'
+import { Check, X, RotateCw, AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Loader2, Pencil, Unlink, Lock, Star, Circle } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { timeAgo } from '@/lib/utils'
@@ -24,6 +24,8 @@ interface ArticleCardProps {
   showPublishedActions?: boolean
   selected?: boolean
   onToggleSelect?: () => void
+  onMarkRead?: (id: string, read: boolean) => void
+  onMarkStar?: (id: string, starred: boolean) => void
 }
 
 export function ArticleCard({
@@ -39,6 +41,8 @@ export function ArticleCard({
   showPublishedActions = false,
   selected = false,
   onToggleSelect,
+  onMarkRead,
+  onMarkStar,
 }: ArticleCardProps) {
   const router = useRouter()
   const currentUserId = useAuthStore(s => s.user?.id)
@@ -169,11 +173,13 @@ export function ArticleCard({
             )}
           </div>
           <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
             <div
+              title={[article.title, article.description ? article.description.slice(0, 300) : ''].filter(Boolean).join('\n\n')}
               style={{
                 fontSize: 13,
                 fontWeight: 600,
-                color: 'var(--text)',
+                color: (article.isRead === true ? 'var(--text-dim)' : 'var(--text)'),
                 lineHeight: 1.45,
                 marginBottom: 5,
                 display: '-webkit-box',
@@ -181,10 +187,51 @@ export function ArticleCard({
                 WebkitBoxOrient: 'vertical' as const,
                 overflow: 'hidden',
                 letterSpacing: '-0.1px',
+                flex: 1,
+                minWidth: 0,
               }}
             >
               {article.title}
             </div>
+            {(onMarkStar != null || onMarkRead != null) && (
+              <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                {onMarkRead != null && (
+                  <button
+                    type="button"
+                    onClick={() => onMarkRead(article.id, !article.isRead)}
+                    title={article.isRead ? 'Mark unread' : 'Mark read'}
+                    style={{
+                      padding: 4,
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 4,
+                      color: article.isRead ? 'var(--accent-light)' : 'var(--text-dim)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Circle size={14} fill={article.isRead ? 'currentColor' : 'transparent'} />
+                  </button>
+                )}
+                {onMarkStar != null && (
+                  <button
+                    type="button"
+                    onClick={() => onMarkStar(article.id, !article.isStarred)}
+                    title={article.isStarred ? 'Unstar' : 'Star'}
+                    style={{
+                      padding: 4,
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 4,
+                      color: article.isStarred ? 'var(--amber)' : 'var(--text-dim)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Star size={14} fill={article.isStarred ? 'currentColor' : 'transparent'} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
             {article.description && (
               <div
                 style={{

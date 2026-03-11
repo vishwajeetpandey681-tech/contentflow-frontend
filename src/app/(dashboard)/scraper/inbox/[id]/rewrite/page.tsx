@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, RotateCw, Send, Loader2, LogOut } from 'lucide-react'
 import useSWR from 'swr'
-import { inboxApi, sourcesApi } from '@/lib/api'
+import { inboxApi, sourcesApi, rewriteApi } from '@/lib/api'
 import { useRewrite } from '@/hooks/useRewrite'
 import { useArticleLock } from '@/hooks/useArticleLock'
 import { useAuthStore } from '@/lib/auth-store'
@@ -14,7 +14,7 @@ import { RewriteStatusStepper } from '@/components/scraper/RewriteStatusStepper'
 import { WPPublishPanel } from '@/components/scraper/WPPublishPanel'
 import { RewritePipelineStrip } from '@/components/scraper/RewritePipelineStrip'
 import { RewriteEditorLayout } from '@/components/scraper/RewriteEditorLayout'
-import { REWRITE_LANGUAGES, HEADING_FORMATS, SUBHEADING_FORMATS, PARAGRAPH_TAGS } from '@/lib/rewrite-options'
+import { REWRITE_LANGUAGES, HEADING_FORMATS, SUBHEADING_FORMATS, PARAGRAPH_TAGS, REWRITE_TONES, REWRITE_AUDIENCES } from '@/lib/rewrite-options'
 import toast from 'react-hot-toast'
 import type { ScraperArticle } from '@/types/article'
 
@@ -63,11 +63,22 @@ export default function RewritePage() {
   const [topbarPublishLoading, setTopbarPublishLoading] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'editor' | 'cards'>('editor')
+  const [versions, setVersions] = useState<import('@/types/article').RewriteVersion[]>([])
+  const [versionLabel, setVersionLabel] = useState('')
+  const [versionSaveLoading, setVersionSaveLoading] = useState(false)
+  const [headlineSuggestions, setHeadlineSuggestions] = useState<string[]>([])
+  const [headlineLoading, setHeadlineLoading] = useState(false)
+  const [keywordSuggestions, setKeywordSuggestions] = useState<string[]>([])
+  const [keywordLoading, setKeywordLoading] = useState(false)
   const [outputLanguage, setOutputLanguage] = useState<string>('english')
   const [customPrompt, setCustomPrompt] = useState<string>('')
   const [headingFormat, setHeadingFormat] = useState<string>('h1')
   const [subheadingFormat, setSubheadingFormat] = useState<string>('h2')
   const [paragraphTag, setParagraphTag] = useState<string>('h4')
+  const [tone, setTone] = useState<string>('')
+  const [targetAudience, setTargetAudience] = useState<string>('')
+  const [customInstruction, setCustomInstruction] = useState<string>('')
+  const [targetWordCount, setTargetWordCount] = useState<number>(580)
 
   const { data: sources } = useSWR('sources', () => sourcesApi.list().then(r => r.data?.data || []))
   const sourceCustomPrompt = article?.sourceId
@@ -86,6 +97,17 @@ export default function RewritePage() {
     if (rewrite?.customPrompt !== undefined) setCustomPrompt(rewrite.customPrompt || '')
     else if (sourceCustomPrompt) setCustomPrompt(sourceCustomPrompt)
   }, [rewrite?.customPrompt, sourceCustomPrompt])
+  useEffect(() => {
+    if (rewrite?.tone !== undefined) setTone(rewrite.tone || '')
+    if (rewrite?.targetAudience !== undefined) setTargetAudience(rewrite.targetAudience || '')
+    if (rewrite?.customInstruction !== undefined) setCustomInstruction(rewrite.customInstruction || '')
+    if (rewrite?.targetWordCount != null) setTargetWordCount(rewrite.targetWordCount)
+  }, [rewrite?.tone, rewrite?.targetAudience, rewrite?.customInstruction, rewrite?.targetWordCount])
+
+  useEffect(() => {
+    if (!articleId) return
+    rewriteApi.versions.list(articleId).then(setVersions).catch(() => setVersions([]))
+  }, [articleId, rewrite?.passes])
 
   // Acquire lock when article is loaded
   useEffect(() => {
@@ -181,6 +203,10 @@ export default function RewritePage() {
     headingFormat,
     subheadingFormat,
     paragraphTag,
+    tone: tone || undefined,
+    targetAudience: targetAudience || undefined,
+    customInstruction: customInstruction.trim() || undefined,
+    targetWordCount: targetWordCount >= 100 && targetWordCount <= 2000 ? targetWordCount : undefined,
   })
 
   const handleStartRewrite = async () => {
@@ -677,7 +703,12 @@ export default function RewritePage() {
                 {article.source.name}
               </span>
             )}
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{article.title}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {article.title}
+              {article.wordCount != null && article.wordCount < 300 && (
+                <span style={{ fontSize: 10, padding: '2px 6px', background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 4, fontWeight: 500 }}>Thin content (&lt;300 words)</span>
+              )}
+            </div>
             {typeof article.url === 'string' && article.url.startsWith('http') && (
               <a
                 href={article.url}
@@ -730,6 +761,48 @@ export default function RewritePage() {
                     <option key={l.value} value={l.value}>{l.label}</option>
                   ))}
                 </select>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Tone</div>
+                <select value={tone} onChange={e => setTone(e.target.value)} style={{ width: '100%', padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}>
+                  {REWRITE_TONES.map(t => (<option key={t.value || 'default'} value={t.value}>{t.label}</option>))}
+                </select>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Target audience</div>
+                <select value={targetAudience} onChange={e => setTargetAudience(e.target.value)} style={{ width: '100%', padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}>
+                  {REWRITE_AUDIENCES.map(a => (<option key={a.value || 'general'} value={a.value}>{a.label}</option>))}
+                </select>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Length (words) {targetWordCount}</div>
+                <input type="range" min={100} max={2000} step={50} value={targetWordCount} onChange={e => setTargetWordCount(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Custom instruction</div>
+                <input
+                  type="text"
+                  value={customInstruction}
+                  onChange={e => setCustomInstruction(e.target.value)}
+                  placeholder="e.g. Focus on Indian context, Add statistics"
+                  style={{ width: '100%', padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <button type="button" onClick={async () => { setHeadlineLoading(true); setHeadlineSuggestions([]); try { const d = await rewriteApi.suggestHeadlines(articleId); setHeadlineSuggestions(d.headlines || []); if (!(d.headlines?.length)) toast.error('No suggestions'); } catch { toast.error('Failed to suggest'); } finally { setHeadlineLoading(false); } }} disabled={headlineLoading} style={{ padding: '6px 12px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', cursor: headlineLoading ? 'not-allowed' : 'pointer' }}>{headlineLoading ? '…' : 'Suggest 3 headlines'}</button>
+                {headlineSuggestions.length > 0 && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>
+                    {headlineSuggestions.map((h, i) => (
+                      <div key={i} style={{ marginBottom: 4 }} title="Click to use as 65-char">{(i + 1)}. {h}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <button type="button" onClick={async () => { setKeywordLoading(true); setKeywordSuggestions([]); try { const d = await rewriteApi.suggestKeywords(articleId); setKeywordSuggestions(d.keywords || []); if (!(d.keywords?.length)) toast.error('No keywords'); } catch { toast.error('Failed to suggest keywords'); } finally { setKeywordLoading(false); } }} disabled={keywordLoading} style={{ padding: '6px 12px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', cursor: keywordLoading ? 'not-allowed' : 'pointer' }}>{keywordLoading ? '…' : 'Suggest keywords (NLP)'}</button>
+                {keywordSuggestions.length > 0 && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>{keywordSuggestions.join(', ')}</div>
+                )}
               </div>
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Heading (main headline)</div>
@@ -846,6 +919,39 @@ export default function RewritePage() {
                   Fetch full article & Start rewrite
                 </button>
               </div>
+            </div>
+          )}
+
+          {rewrite?.quality && (
+            <div style={{ padding: 14, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Quality</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 12 }}>
+                <span title="Word count">{rewrite.quality.wordCount} words</span>
+                <span title="Reading time">~{rewrite.quality.readTime} min read</span>
+                {rewrite.quality.fleschKincaid != null && <span title="Flesch-Kincaid (higher = easier)">Readability: {rewrite.quality.fleschKincaid}</span>}
+                {rewrite.quality.seoScore != null && <span title="SEO score">SEO: {rewrite.quality.seoScore}</span>}
+                {rewrite.quality.similarityPercent != null && <span title="Similarity to original (lower = more original)">Similarity: {rewrite.quality.similarityPercent}%</span>}
+              </div>
+            </div>
+          )}
+
+          {passes.length > 0 && (
+            <div style={{ padding: 14, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Version history</div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                <input type="text" value={versionLabel} onChange={e => setVersionLabel(e.target.value)} placeholder="Label (e.g. Draft 1)" style={{ flex: 1, padding: '6px 10px', fontSize: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
+                <button type="button" onClick={async () => { setVersionSaveLoading(true); try { await rewriteApi.versions.save(articleId, versionLabel || undefined); setVersions(await rewriteApi.versions.list(articleId)); setVersionLabel(''); mutate(); toast.success('Version saved'); } catch { toast.error('Failed to save'); } finally { setVersionSaveLoading(false); } }} disabled={versionSaveLoading} style={{ padding: '6px 12px', fontSize: 11, background: 'var(--accent-glow)', color: 'var(--accent-light)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 6, cursor: versionSaveLoading ? 'not-allowed' : 'pointer' }}>{versionSaveLoading ? '…' : 'Save version'}</button>
+              </div>
+              {versions.length > 0 && (
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: 11 }}>
+                  {versions.slice(0, 10).map(v => (
+                    <li key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--border)' }}>
+                      <span style={{ color: 'var(--text)' }}>{v.label} · {new Date(v.createdAt).toLocaleString()}</span>
+                      <button type="button" onClick={async () => { try { await rewriteApi.versions.restore(articleId, v.id); mutate(); toast.success('Restored'); setVersions(await rewriteApi.versions.list(articleId)); } catch { toast.error('Restore failed'); } }} style={{ padding: '4px 8px', fontSize: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer' }}>Restore</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 

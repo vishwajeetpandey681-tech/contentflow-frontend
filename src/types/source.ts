@@ -32,6 +32,23 @@ export const CRON_PRESETS = [
   { label: 'Manual only', value: '' },
 ] as const
 
+export const FETCH_INTERVAL_PRESETS = [
+  { label: '15 minutes', value: '15m' },
+  { label: '1 hour', value: '1h' },
+  { label: '6 hours', value: '6h' },
+  { label: '12 hours', value: '12h' },
+  { label: '24 hours', value: '24h' },
+  { label: 'Manual only', value: '' },
+] as const
+
+export interface SourceHealth {
+  lastFetchedAt: string | null
+  successRate: number | null
+  avgArticlesPerFetch: number | null
+  alert: boolean
+  healthStatus: 'green' | 'yellow' | 'red'
+}
+
 export interface ScraperSource {
   id:            string
   name:          string
@@ -44,14 +61,25 @@ export interface ScraperSource {
   isBlocked:     boolean
   blockedReason: string | null
   cronSchedule:  string
+  fetchInterval?: string
   lastScrapedAt: string | null
   maxPerRun:     number
   failCount:     number
+  successCount?: number
   createdAt:     string
   customPrompt?: string | null
   defaultOutputLanguage?: OutputLanguage | null
   channel?: string | null
   category?: ArticleCategory | string | null
+  keywordWhitelist?: string | null
+  keywordBlacklist?: string | null
+  minArticleLength?: number | null
+  maxArticleLength?: number | null
+  languageFilter?: string | null
+  maxArticleAgeDays?: number | null
+  feedTitle?: string | null
+  feedDescription?: string | null
+  feedFavicon?: string | null
   counts?: {
     pending:  number
     approved: number
@@ -59,6 +87,7 @@ export interface ScraperSource {
     failed:   number
     total:    number
   }
+  health?: SourceHealth
 }
 
 export interface HtmlListingConfig {
@@ -78,6 +107,7 @@ export interface CreateSourceInput {
   type:                   SourceType
   maxPerRun:              number
   cronSchedule:           string
+  fetchInterval?:         string
   htmlListingConfig?:     HtmlListingConfig
   fallbackUrl?:           string | null
   fallbackHtmlListingConfig?: HtmlListingConfig | null
@@ -85,4 +115,13 @@ export interface CreateSourceInput {
   defaultOutputLanguage?: OutputLanguage | null
   channel?:               string | null
   category?:              ArticleCategory | string | null
+  keywordWhitelist?:      string | null
+  keywordBlacklist?:      string | null
+  minArticleLength?:      number | null
+  maxArticleLength?:      number | null
+  languageFilter?:        string | null
+  maxArticleAgeDays?:     number | null
+  feedTitle?:             string | null
+  feedDescription?:       string | null
+  feedFavicon?:           string | null
 }

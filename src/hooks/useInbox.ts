@@ -4,7 +4,19 @@ import type { ScraperArticle, ArticleStatus } from '@/types/article'
 
 const LIMIT_OPTIONS = [10, 30, 50, 100] as const
 
-export function useInbox(status: ArticleStatus, search = '', limit: number = 30, category = '', fromDate = '', toDate = '', published = false, activeSourcesOnly = false) {
+export function useInbox(
+  status: ArticleStatus,
+  search = '',
+  limit: number = 30,
+  category = '',
+  fromDate = '',
+  toDate = '',
+  published = false,
+  activeSourcesOnly = false,
+  sourceId = '',
+  isRead?: boolean,
+  isStarred?: boolean
+) {
   const [articles, setArticles] = useState<ScraperArticle[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -13,7 +25,7 @@ export function useInbox(status: ArticleStatus, search = '', limit: number = 30,
   const [error, setError] = useState<string | null>(null)
   const fetchIdRef = useRef(0)
 
-  const key = `inbox-${status}-${search}-${limit}-${category}-${fromDate}-${toDate}-${published}-${activeSourcesOnly}`
+  const key = `inbox-${status}-${search}-${limit}-${category}-${fromDate}-${toDate}-${published}-${activeSourcesOnly}-${sourceId}-${isRead}-${isStarred}`
 
   const fetchPage = useCallback(async (p: number, append: boolean) => {
     const id = ++fetchIdRef.current
@@ -31,6 +43,9 @@ export function useInbox(status: ArticleStatus, search = '', limit: number = 30,
         toDate: toDate || undefined,
         published: published || undefined,
         activeSourcesOnly: activeSourcesOnly || undefined,
+        sourceId: sourceId || undefined,
+        isRead: isRead !== undefined ? isRead : undefined,
+        isStarred: isStarred !== undefined ? isStarred : undefined,
       })
       if (id !== fetchIdRef.current) return
       const data = (res.data?.data ?? res.data ?? []) as ScraperArticle[]
@@ -54,7 +69,7 @@ export function useInbox(status: ArticleStatus, search = '', limit: number = 30,
         setLoadingMore(false)
       }
     }
-  }, [status, search, limit, category, fromDate, toDate, published, activeSourcesOnly])
+  }, [status, search, limit, category, fromDate, toDate, published, activeSourcesOnly, sourceId, isRead, isStarred])
 
   useEffect(() => {
     setPage(1)

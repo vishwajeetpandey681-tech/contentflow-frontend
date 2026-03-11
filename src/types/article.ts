@@ -9,7 +9,7 @@ export type ArticleStatus =
 export type RewriteStatus = 'IDLE' | 'RUNNING' | 'DONE' | 'FAILED'
 
 export interface RewritePass {
-  id: 'full' | 'shortnews' | 'char120' | 'char65' | 'keywords'
+  id: 'full' | 'shortnews' | 'char120' | 'char65' | 'keywords' | 'social_caption' | 'push_notification'
   label: string
   description: string
   wpField: string
@@ -17,6 +17,14 @@ export interface RewritePass {
   status: RewriteStatus
   output: string
   originalOutput: string
+}
+
+export interface RewriteQuality {
+  wordCount: number
+  readTime: number
+  fleschKincaid: number | null
+  seoScore: number | null
+  similarityPercent: number | null
 }
 
 export interface ArticleRewrite {
@@ -27,6 +35,18 @@ export interface ArticleRewrite {
   outputLanguage?: string
   customPrompt?: string | null
   customFooter?: string | null
+  tone?: string | null
+  targetAudience?: string | null
+  customInstruction?: string | null
+  targetWordCount?: number | null
+  quality?: RewriteQuality | null
+}
+
+export interface RewriteVersion {
+  id: string
+  label: string
+  createdAt: string
+  passes: RewritePass[]
 }
 
 export interface ScraperArticle {
@@ -61,6 +81,8 @@ export interface ScraperArticle {
   lockedByName?: string | null
   lockedAt?:    string | null
   lockExpiresAt?: string | null
+  isRead?:      boolean
+  isStarred?:   boolean
 }
 
 export interface InboxStats {

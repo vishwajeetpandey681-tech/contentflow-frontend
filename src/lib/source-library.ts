@@ -60,6 +60,8 @@ const ENGLISH_SOURCES: LibrarySource[] = [
   { name: 'The Hindu Sport', url: 'https://www.thehindu.com/sport/feeder/default.rss', channel: 'The Hindu', category: 'Sports', language: EN, type: R },
   // Economic Times
   { name: 'ET Markets', url: 'https://economictimes.indiatimes.com/markets/rssfeeds/1977029391.cms', channel: 'Economic Times', category: 'Business', language: EN, type: R },
+  { name: 'ET Markets (Alt)', url: 'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms', channel: 'Economic Times', category: 'Business', language: EN, type: R },
+  { name: 'ET Economy', url: 'https://economictimes.indiatimes.com/news/economy/rssfeeds/20908763.cms', channel: 'Economic Times', category: 'Business', language: EN, type: R },
   { name: 'ET Tech', url: 'https://economictimes.indiatimes.com/tech/rssfeeds/13358110.cms', channel: 'Economic Times', category: 'Technology', language: EN, type: R },
   { name: 'ET India', url: 'https://economictimes.indiatimes.com/news/politics-and-nation/rssfeeds/4229393.cms', channel: 'Economic Times', category: 'Politics', language: EN, type: R },
   // BBC
@@ -89,7 +91,16 @@ const ENGLISH_SOURCES: LibrarySource[] = [
   { name: 'MySmartPrice', url: 'https://www.mysmartprice.com/gear/feed/', channel: 'MySmartPrice', category: 'Technology', language: EN, type: R },
   { name: 'Economic Times', url: 'https://economictimes.indiatimes.com/rssfeedstopstories.cms', channel: 'Economic Times', category: 'Business', language: EN, type: R },
   { name: 'Business Standard', url: 'https://www.business-standard.com/rss/home_page_top_stories.rss', channel: 'Business Standard', category: 'Business', language: EN, type: R },
+  { name: 'Business Standard Markets', url: 'https://www.business-standard.com/rss/markets-106.rss', channel: 'Business Standard', category: 'Business', language: EN, type: R },
   { name: 'LiveMint', url: 'https://www.livemint.com/rss/news', channel: 'LiveMint', category: 'Business', language: EN, type: R },
+  { name: 'LiveMint Markets', url: 'https://www.livemint.com/rss/markets', channel: 'LiveMint', category: 'Business', language: EN, type: R },
+  // Moneycontrol — English
+  { name: 'Moneycontrol Latest News', url: 'https://www.moneycontrol.com/rss/latestnews.xml', channel: 'Moneycontrol', category: 'Business', language: EN, type: R },
+  { name: 'Moneycontrol Markets', url: 'https://www.moneycontrol.com/rss/marketsnews.xml', channel: 'Moneycontrol', category: 'Business', language: EN, type: R },
+  { name: 'Moneycontrol Economy', url: 'https://www.moneycontrol.com/rss/economy.xml', channel: 'Moneycontrol', category: 'Business', language: EN, type: R },
+  { name: 'Moneycontrol Stocks', url: 'https://www.moneycontrol.com/rss/marketreports.xml', channel: 'Moneycontrol', category: 'Business', language: EN, type: R },
+  { name: 'Moneycontrol Personal Finance', url: 'https://www.moneycontrol.com/rss/personalfinance.xml', channel: 'Moneycontrol', category: 'Business', language: EN, type: R },
+  { name: 'Moneycontrol Mutual Funds', url: 'https://www.moneycontrol.com/rss/mutualfunds.xml', channel: 'Moneycontrol', category: 'Business', language: EN, type: R },
   { name: 'ANI News', url: 'https://aninews.in/rss.xml', channel: 'ANI', category: 'General', language: EN, type: R },
   { name: 'Navbharat Times', url: 'https://navbharattimes.indiatimes.com/rssfeedsdefault.cms', channel: 'Navbharat Times', category: 'General', language: EN, type: R, fallbackUrl: 'https://navbharattimes.indiatimes.com/', fallbackHtmlListingConfig: { baseUrl: 'https://navbharattimes.indiatimes.com', linkSelector: 'a[href*="/articleshow/"], a[href*="/liveblog/"]' } },
   { name: 'News18 India (HTML)', url: 'https://www.news18.com/india/', channel: 'News18', category: 'Politics', language: EN, type: H, htmlListingConfig: news18Html },
@@ -147,6 +158,13 @@ const HINDI_SOURCES: LibrarySource[] = [
   { name: 'OpIndia Hindi', url: 'https://hindi.opindia.com/feed/', channel: 'OpIndia', category: 'Politics', language: HI, type: R },
   { name: 'Swarajya', url: 'https://swarajyamag.com/feed', channel: 'Swarajya', category: 'Politics', language: HI, type: R },
   { name: 'Bharat Express', url: 'https://bharatexpress.com/feed', channel: 'Bharat Express', category: 'Digital', language: HI, type: R },
+  // === HINDI BUSINESS DEDICATED ===
+  { name: 'Moneycontrol Hindi News', url: 'https://hindi.moneycontrol.com/rss/latestnews.xml', channel: 'Moneycontrol', category: 'Business', language: HI, type: R },
+  { name: 'Moneycontrol Hindi Markets', url: 'https://hindi.moneycontrol.com/rss/marketsnews.xml', channel: 'Moneycontrol', category: 'Business', language: HI, type: R },
+  { name: 'Moneycontrol Hindi Economy', url: 'https://hindi.moneycontrol.com/rss/economy.xml', channel: 'Moneycontrol', category: 'Business', language: HI, type: R },
+  { name: 'Moneycontrol Hindi Personal Finance', url: 'https://hindi.moneycontrol.com/rss/personalfinance.xml', channel: 'Moneycontrol', category: 'Business', language: HI, type: R },
+  { name: 'Business Standard Hindi', url: 'https://hindi.business-standard.com/rss/latest.rss', channel: 'Business Standard', category: 'Business', language: HI, type: R },
+  { name: 'Mint Hindi', url: 'https://www.livemint.com/hindi/rss/news.xml', channel: 'Mint', category: 'Business', language: HI, type: R },
 ]
 
 export const SOURCE_LIBRARY: LibrarySource[] = [...ENGLISH_SOURCES, ...HINDI_SOURCES]

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, RotateCw, Send, Loader2, LogOut } from 'lucide-react'
+import { ArrowLeft, RotateCw, Send, Loader2, LogOut, ChevronDown, Settings2, Zap, Globe, Clock } from 'lucide-react'
 import useSWR from 'swr'
 import { inboxApi, sourcesApi, rewriteApi } from '@/lib/api'
 import { useRewrite } from '@/hooks/useRewrite'
@@ -70,6 +70,7 @@ export default function RewritePage() {
   const [versionSaveLoading, setVersionSaveLoading] = useState(false)
   const [publishSheetOpen, setPublishSheetOpen] = useState(false)
   const [publishHistoryRefreshKey, setPublishHistoryRefreshKey] = useState(0)
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(true)
   const [headlineSuggestions, setHeadlineSuggestions] = useState<string[]>([])
   const [headlineLoading, setHeadlineLoading] = useState(false)
   const [keywordSuggestions, setKeywordSuggestions] = useState<string[]>([])
@@ -390,208 +391,16 @@ export default function RewritePage() {
     )
   }
 
-  const topbarDesktop = (
-    <div
-      className="hidden lg:flex"
-      style={{
-        alignItems: 'center',
-        gap: 16,
-        padding: '12px 20px',
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--surface)',
-        flexShrink: 0,
-      }}
-    >
-      <button
-        onClick={() => router.push('/scraper/inbox/')}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          background: 'none',
-          border: 'none',
-          color: 'var(--text-muted)',
-          fontSize: 12,
-          cursor: 'pointer',
-        }}
-      >
-        <ArrowLeft size={16} />
-        Inbox
-      </button>
-      {lockedByMe && (
-        <button
-          onClick={handleReleaseArticle}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 12px',
-            fontSize: 11,
-            background: 'transparent',
-            color: 'var(--text-muted)',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            cursor: 'pointer',
-          }}
-        >
-          Release article
-        </button>
-      )}
-      <span
-        style={{
-          flex: 1,
-          fontSize: 13,
-          fontWeight: 600,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          maxWidth: 300,
-        }}
-      >
-        {article.title}
-      </span>
-      <button
-        onClick={handleRerunSelected}
-        disabled={selectedCount === 0}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '6px 12px',
-          fontSize: 11,
-          background: 'var(--surface)',
-          color: 'var(--text-muted)',
-          border: '1px solid var(--border)',
-          borderRadius: 6,
-          cursor: selectedCount > 0 ? 'pointer' : 'not-allowed',
-        }}
-      >
-        <RotateCw size={12} />
-        Re-run Selected ({selectedCount})
-      </button>
-      {passes.length > 0 && !passes.every(p => p.status === 'IDLE') && (
-        <button
-          onClick={() => setViewMode(m => (m === 'editor' ? 'cards' : 'editor'))}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 12px',
-            fontSize: 11,
-            background: viewMode === 'cards' ? 'var(--accent-glow)' : 'var(--surface)',
-            color: viewMode === 'cards' ? 'var(--accent-light)' : 'var(--text-muted)',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            cursor: 'pointer',
-          }}
-        >
-          {viewMode === 'editor' ? 'Cards' : 'Editor'}
-        </button>
-      )}
-      <button
-        onClick={handleRerunAll}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '6px 12px',
-          fontSize: 11,
-          background: 'var(--accent-glow)',
-          color: 'var(--accent-light)',
-          border: '1px solid rgba(124,58,237,0.3)',
-          borderRadius: 6,
-          cursor: 'pointer',
-        }}
-      >
-        ↺ Re-run All
-      </button>
-      <button
-        onClick={handleOpenPublishSheet}
-        disabled={!allDone}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '6px 12px',
-          fontSize: 11,
-          fontWeight: 600,
-          background: allDone ? 'linear-gradient(135deg, var(--green) 0%, #00c48a 100%)' : 'var(--surface)',
-          color: allDone ? '#fff' : 'var(--text-dim)',
-          border: '1px solid var(--border)',
-          borderRadius: 6,
-          cursor: allDone ? 'pointer' : 'not-allowed',
-          boxShadow: allDone ? '0 2px 8px rgba(0,229,160,0.3)' : 'none',
-        }}
-      >
-        <Send size={12} />
-        {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
-      </button>
-    </div>
-  )
-
-  const topbarMobile = (
-    <div
-      className="lg:hidden flex"
-      style={{
-        alignItems: 'center',
-        gap: 12,
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--surface)',
-        flexShrink: 0,
-      }}
-    >
-      <button
-        onClick={() => router.push('/scraper/inbox/')}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          background: 'none',
-          border: 'none',
-          color: 'var(--text-muted)',
-          padding: 4,
-          cursor: 'pointer',
-        }}
-      >
-        <ArrowLeft size={20} />
-      </button>
-      <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>AI Rewrite</span>
-      {lockedByMe && (
-        <button
-          onClick={handleReleaseArticle}
-          style={{
-            padding: '6px 10px',
-            fontSize: 11,
-            background: 'transparent',
-            color: 'var(--text-muted)',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            cursor: 'pointer',
-          }}
-        >
-          Release
-        </button>
-      )}
-      <button
-        onClick={handleRerunSelected}
-        disabled={selectedCount === 0}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          padding: '6px 10px',
-          fontSize: 11,
-          background: 'var(--surface)',
-          color: 'var(--text-muted)',
-          border: '1px solid var(--border)',
-          borderRadius: 6,
-          cursor: selectedCount > 0 ? 'pointer' : 'not-allowed',
-        }}
-      >
-        Re-run ({selectedCount})
-      </button>
-    </div>
-  )
+  // ─── Reusable style tokens ───────────────────────────────────────────────────
+  const sInput: React.CSSProperties = {
+    width: '100%', padding: '8px 10px', fontSize: 13,
+    background: 'var(--card)', border: '1px solid var(--border)',
+    borderRadius: 8, color: 'var(--text)', fontFamily: 'inherit', outline: 'none',
+  }
+  const sLabel: React.CSSProperties = {
+    display: 'block', fontSize: 11, fontWeight: 600,
+    color: 'var(--text-muted)', marginBottom: 5, letterSpacing: '0.02em',
+  }
 
   const showEditorLayout = viewMode === 'editor' && passes.length > 0 && !passes.every(p => p.status === 'IDLE')
 
@@ -652,733 +461,550 @@ export default function RewritePage() {
     )
   }
 
-  return (
-    <div className="rewrite-page flex flex-1 flex-col min-h-0 overflow-hidden" style={{ background: 'var(--bg)' }}>
-      {topbarDesktop}
-      {topbarMobile}
+  // ─── Shared settings form ────────────────────────────────────────────────────
+  const settingsForm = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Language + Tone row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div>
+          <label style={sLabel}>Language</label>
+          <select value={outputLanguage} onChange={e => setOutputLanguage(e.target.value)} style={sInput}>
+            {REWRITE_LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={sLabel}>Tone</label>
+          <select value={tone} onChange={e => setTone(e.target.value)} style={sInput}>
+            {REWRITE_TONES.map(t => <option key={t.value || 'default'} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+      </div>
 
-      {/* Mobile: Pipeline strip (sticky below topbar) */}
-      <div className="lg:hidden shrink-0" style={{ position: 'sticky', top: 52, zIndex: 15, background: 'var(--bg)', borderBottom: '1px solid var(--border-subtle)' }}>
+      {/* Audience + Word count */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div>
+          <label style={sLabel}>Audience</label>
+          <select value={targetAudience} onChange={e => setTargetAudience(e.target.value)} style={sInput}>
+            {REWRITE_AUDIENCES.map(a => <option key={a.value || 'general'} value={a.value}>{a.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={sLabel}>Words: {targetWordCount}</label>
+          <input type="range" min={100} max={2000} step={50} value={targetWordCount}
+            onChange={e => setTargetWordCount(Number(e.target.value))}
+            style={{ width: '100%', accentColor: 'var(--accent)', marginTop: 6 }} />
+        </div>
+      </div>
+
+      {/* Format row */}
+      <div>
+        <label style={sLabel}>Format</label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+          <select value={headingFormat} onChange={e => setHeadingFormat(e.target.value)}
+            style={{ ...sInput, padding: '6px 8px', fontSize: 12 }}>
+            {HEADING_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </select>
+          <select value={subheadingFormat} onChange={e => setSubheadingFormat(e.target.value)}
+            style={{ ...sInput, padding: '6px 8px', fontSize: 12 }}>
+            {SUBHEADING_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </select>
+          <select value={paragraphTag} onChange={e => setParagraphTag(e.target.value)}
+            style={{ ...sInput, padding: '6px 8px', fontSize: 12 }}>
+            {PARAGRAPH_TAGS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 4, fontSize: 10, color: 'var(--text-dim)' }}>
+          <span style={{ flex: 1, textAlign: 'center' }}>Heading</span>
+          <span style={{ flex: 1, textAlign: 'center' }}>Subheading</span>
+          <span style={{ flex: 1, textAlign: 'center' }}>Paragraph</span>
+        </div>
+      </div>
+
+      {/* Custom instruction */}
+      <div>
+        <label style={sLabel}>Custom instruction</label>
+        <input type="text" value={customInstruction} onChange={e => setCustomInstruction(e.target.value)}
+          placeholder="e.g. Focus on Indian context, Add statistics" style={sInput} />
+      </div>
+
+      {/* Custom prompt */}
+      <div>
+        <label style={sLabel}>Custom prompt <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>(optional)</span></label>
+        <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)}
+          placeholder="Override prompt. Use {{LANGUAGE}}, {{TITLE}}, {{CONTENT}}"
+          rows={3} style={{ ...sInput, resize: 'vertical' }} />
+      </div>
+
+      {/* AI Suggestions */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <button type="button"
+          onClick={async () => { setHeadlineLoading(true); setHeadlineSuggestions([]); try { const d = await rewriteApi.suggestHeadlines(articleId); setHeadlineSuggestions(d.headlines || []); if (!d.headlines?.length) toast.error('No suggestions'); } catch { toast.error('Failed to suggest'); } finally { setHeadlineLoading(false); } }}
+          disabled={headlineLoading}
+          style={{ padding: '8px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(108,99,255,0.08)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 8, cursor: headlineLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+          <Zap size={12} />{headlineLoading ? '…' : 'Suggest Headlines'}
+        </button>
+        <button type="button"
+          onClick={async () => { setKeywordLoading(true); setKeywordSuggestions([]); try { const d = await rewriteApi.suggestKeywords(articleId); setKeywordSuggestions(d.keywords || []); if (!d.keywords?.length) toast.error('No keywords'); } catch { toast.error('Failed'); } finally { setKeywordLoading(false); } }}
+          disabled={keywordLoading}
+          style={{ padding: '8px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(0,212,255,0.06)', color: 'var(--cyan)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 8, cursor: keywordLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+          <Zap size={12} />{keywordLoading ? '…' : 'NLP Keywords'}
+        </button>
+      </div>
+      {headlineSuggestions.length > 0 && (
+        <div style={{ background: 'var(--card)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: '1px' }}>HEADLINES</div>
+          {headlineSuggestions.map((h, i) => (
+            <div key={i} style={{ fontSize: 12, color: 'var(--text)', padding: '4px 0', borderTop: i > 0 ? '1px solid var(--border-subtle)' : 'none' }}>{i + 1}. {h}</div>
+          ))}
+        </div>
+      )}
+      {keywordSuggestions.length > 0 && (
+        <div style={{ background: 'var(--card)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)' }}>
+          {keywordSuggestions.join(' · ')}
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--bg)' }}>
+
+      {/* ═══ HEADER — Desktop ═══════════════════════════════════════════════════ */}
+      <header className="hidden lg:flex" style={{
+        alignItems: 'center', gap: 12, padding: '0 20px', height: 56,
+        borderBottom: '1px solid var(--border)',
+        background: 'linear-gradient(to right, var(--surface), rgba(var(--surface-rgb),0.95))',
+        flexShrink: 0, backdropFilter: 'blur(12px)',
+      }}>
+        {/* Back */}
+        <button onClick={() => router.push('/scraper/inbox/')}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer', padding: '4px 0', flexShrink: 0 }}>
+          <ArrowLeft size={15} /> Inbox
+        </button>
+        <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
+
+        {/* Article meta */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+          {article.source?.name && (
+            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'rgba(108,99,255,0.12)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', fontWeight: 700, letterSpacing: '0.02em', flexShrink: 0 }}>
+              {article.source.name}
+            </span>
+          )}
+          <span style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
+            {article.title}
+          </span>
+          {article.wpPostId && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: 'rgba(0,229,160,0.1)', color: 'var(--success)', border: '1px solid rgba(0,229,160,0.25)', fontWeight: 600, flexShrink: 0 }}>
+              🌐 Published
+            </span>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {lockedByMe && (
+            <button onClick={handleReleaseArticle}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', fontSize: 11, background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+              <LogOut size={12} /> Release
+            </button>
+          )}
+          {passes.length > 0 && !passes.every(p => p.status === 'IDLE') && (
+            <button onClick={() => setViewMode(m => m === 'editor' ? 'cards' : 'editor')}
+              style={{ padding: '6px 12px', fontSize: 11, background: viewMode === 'cards' ? 'rgba(108,99,255,0.12)' : 'var(--card)', color: viewMode === 'cards' ? 'var(--accent-light)' : 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+              {viewMode === 'editor' ? 'Card view' : 'Editor view'}
+            </button>
+          )}
+          <button onClick={handleRerunSelected} disabled={selectedCount === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', fontSize: 11, background: selectedCount > 0 ? 'rgba(108,99,255,0.08)' : 'var(--card)', color: selectedCount > 0 ? 'var(--accent-light)' : 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 8, cursor: selectedCount > 0 ? 'pointer' : 'not-allowed', opacity: selectedCount > 0 ? 1 : 0.5 }}>
+            <RotateCw size={12} /> Re-run ({selectedCount})
+          </button>
+          <button onClick={handleRerunAll}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', fontSize: 11, fontWeight: 600, background: 'rgba(108,99,255,0.12)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.25)', borderRadius: 8, cursor: 'pointer' }}>
+            <RotateCw size={12} /> Re-run All
+          </button>
+          <button onClick={handleOpenPublishSheet} disabled={!allDone}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', fontSize: 12, fontWeight: 700, background: allDone ? 'linear-gradient(135deg, #00e5a0 0%, #00b87a 100%)' : 'var(--card)', color: allDone ? '#fff' : 'var(--text-dim)', border: 'none', borderRadius: 8, cursor: allDone ? 'pointer' : 'not-allowed', opacity: allDone ? 1 : 0.45, boxShadow: allDone ? '0 2px 12px rgba(0,229,160,0.4)' : 'none', transition: 'all 0.2s' }}>
+            <Send size={13} />
+            {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
+          </button>
+        </div>
+      </header>
+
+      {/* ═══ HEADER — Mobile ════════════════════════════════════════════════════ */}
+      <header className="lg:hidden flex" style={{
+        alignItems: 'center', gap: 10, padding: '0 16px', height: 52,
+        borderBottom: '1px solid var(--border)', background: 'var(--surface)',
+        flexShrink: 0, position: 'sticky', top: 0, zIndex: 30,
+      }}>
+        <button onClick={() => router.push('/scraper/inbox/')}
+          style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', color: 'var(--text-muted)', padding: '6px', cursor: 'pointer', borderRadius: 8 }}>
+          <ArrowLeft size={20} />
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>AI Rewrite</div>
+          {runningIndex >= 0 && (
+            <div style={{ fontSize: 10, color: 'var(--accent-light)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Loader2 size={9} style={{ animation: 'spin 0.8s linear infinite' }} />
+              Running pass {runningIndex + 1}…
+            </div>
+          )}
+          {allDone && (
+            <div style={{ fontSize: 10, color: 'var(--success)' }}>✓ All passes complete</div>
+          )}
+        </div>
+        {lockedByMe && (
+          <button onClick={handleReleaseArticle}
+            style={{ padding: '6px 10px', fontSize: 11, background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>
+            Release
+          </button>
+        )}
+        <button onClick={handleOpenPublishSheet} disabled={!allDone}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', fontSize: 12, fontWeight: 700, background: allDone ? 'linear-gradient(135deg,#00e5a0,#00b87a)' : 'var(--card)', color: allDone ? '#fff' : 'var(--text-dim)', border: 'none', borderRadius: 8, cursor: allDone ? 'pointer' : 'not-allowed', opacity: allDone ? 1 : 0.45, boxShadow: allDone ? '0 2px 10px rgba(0,229,160,0.35)' : 'none' }}>
+          <Send size={12} />{article.wpPostId ? 'Update' : 'Release'}
+        </button>
+      </header>
+
+      {/* ═══ MOBILE: Pipeline strip ════════════════════════════════════════════ */}
+      <div className="lg:hidden" style={{ flexShrink: 0, borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg)' }}>
         <RewritePipelineStrip passes={passes} />
       </div>
 
-      <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
-        {/* Mobile: single scroll container for passes + publish; Desktop: passes panel only */}
-        <div
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden lg:overflow-y-auto p-4 flex flex-col gap-4 rewrite-mobile-scroll"
-          style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
-        >
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: '1.5px',
-              textTransform: 'uppercase',
-              color: 'var(--text-dim)',
-              fontFamily: 'Geist Mono, monospace',
-              marginBottom: 4,
-            }}
-          >
-            AI REWRITE PASSES
-          </div>
-          <div
-            style={{
-              padding: 14,
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: 12,
-            }}
-          >
-            {article.source?.name && (
-              <span
-                style={{
-                  display: 'inline-block',
-                  fontSize: 10,
-                  padding: '2px 7px',
-                  borderRadius: 5,
-                  border: '1px solid rgba(124,58,237,0.2)',
-                  color: 'var(--accent-light)',
-                  background: 'var(--accent-glow)',
-                  fontFamily: 'Geist Mono, monospace',
-                  marginBottom: 8,
-                }}
-              >
-                {article.source.name}
-              </span>
-            )}
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {article.title}
-              {article.wordCount != null && article.wordCount < 300 && (
-                <span style={{ fontSize: 10, padding: '2px 6px', background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 4, fontWeight: 500 }}>Thin content (&lt;300 words)</span>
+      {/* ═══ BODY ═══════════════════════════════════════════════════════════════ */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+        {/* ─── DESKTOP LEFT SIDEBAR: Settings ─────────────────────────────────── */}
+        <aside className="hidden lg:flex" style={{
+          width: 270, flexShrink: 0, flexDirection: 'column',
+          borderRight: '1px solid var(--border)',
+          background: 'var(--surface)',
+          overflowY: 'auto', overflowX: 'hidden',
+        }}>
+          {/* Article info */}
+          <div style={{ padding: '16px 16px 0' }}>
+            <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 10 }}>ARTICLE</div>
+            <div style={{ padding: 12, background: 'var(--card)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 4, lineHeight: 1.4 }}>{article.title}</div>
+              {article.wordCount != null && (
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Clock size={9} /> {article.wordCount} words
+                  {article.wordCount < 300 && <span style={{ color: 'var(--amber)', background: 'var(--amber-bg)', padding: '1px 5px', borderRadius: 4 }}>Thin content</span>}
+                </div>
+              )}
+              {typeof article.url === 'string' && article.url.startsWith('http') && (
+                <a href={article.url} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 10, color: 'var(--cyan)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                  <Globe size={9} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{article.url}</span>
+                </a>
               )}
             </div>
-            {typeof article.url === 'string' && article.url.startsWith('http') && (
-              <a
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  fontSize: 11,
-                  color: 'var(--cyan)',
-                  textDecoration: 'none',
-                  fontFamily: 'Geist Mono, monospace',
-                  display: 'block',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {article.url}
-              </a>
+
+            {/* Quality pills */}
+            {rewrite?.quality && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 12 }}>
+                {[
+                  { label: `${rewrite.quality.wordCount}w`, title: 'Word count' },
+                  { label: `~${rewrite.quality.readTime}min`, title: 'Reading time' },
+                  rewrite.quality.seoScore != null ? { label: `SEO ${rewrite.quality.seoScore}`, title: 'SEO score' } : null,
+                  rewrite.quality.similarityPercent != null ? { label: `${rewrite.quality.similarityPercent}% sim`, title: 'Similarity to original' } : null,
+                ].filter(Boolean).map((q, i) => (
+                  <span key={i} title={q!.title} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 20, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                    {q!.label}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
 
-          {(article.status === 'APPROVED' || article.status === 'EXPORTED') && (passes.length === 0 || passes.every(p => p.status === 'IDLE')) && (
-            <div
-              style={{
-                padding: 14,
-                background: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-              }}
-            >
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Output language</div>
-                <select
-                  value={outputLanguage}
-                  onChange={e => setOutputLanguage(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--text)',
-                    fontSize: 12,
-                  }}
-                >
-                  {REWRITE_LANGUAGES.map(l => (
-                    <option key={l.value} value={l.value}>{l.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Tone</div>
-                <select value={tone} onChange={e => setTone(e.target.value)} style={{ width: '100%', padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}>
-                  {REWRITE_TONES.map(t => (<option key={t.value || 'default'} value={t.value}>{t.label}</option>))}
-                </select>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Target audience</div>
-                <select value={targetAudience} onChange={e => setTargetAudience(e.target.value)} style={{ width: '100%', padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}>
-                  {REWRITE_AUDIENCES.map(a => (<option key={a.value || 'general'} value={a.value}>{a.label}</option>))}
-                </select>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Length (words) {targetWordCount}</div>
-                <input type="range" min={100} max={2000} step={50} value={targetWordCount} onChange={e => setTargetWordCount(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--accent)' }} />
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Custom instruction</div>
-                <input
-                  type="text"
-                  value={customInstruction}
-                  onChange={e => setCustomInstruction(e.target.value)}
-                  placeholder="e.g. Focus on Indian context, Add statistics"
-                  style={{ width: '100%', padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}
-                />
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <button type="button" onClick={async () => { setHeadlineLoading(true); setHeadlineSuggestions([]); try { const d = await rewriteApi.suggestHeadlines(articleId); setHeadlineSuggestions(d.headlines || []); if (!(d.headlines?.length)) toast.error('No suggestions'); } catch { toast.error('Failed to suggest'); } finally { setHeadlineLoading(false); } }} disabled={headlineLoading} style={{ padding: '6px 12px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', cursor: headlineLoading ? 'not-allowed' : 'pointer' }}>{headlineLoading ? '…' : 'Suggest 3 headlines'}</button>
-                {headlineSuggestions.length > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>
-                    {headlineSuggestions.map((h, i) => (
-                      <div key={i} style={{ marginBottom: 4 }} title="Click to use as 65-char">{(i + 1)}. {h}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <button type="button" onClick={async () => { setKeywordLoading(true); setKeywordSuggestions([]); try { const d = await rewriteApi.suggestKeywords(articleId); setKeywordSuggestions(d.keywords || []); if (!(d.keywords?.length)) toast.error('No keywords'); } catch { toast.error('Failed to suggest keywords'); } finally { setKeywordLoading(false); } }} disabled={keywordLoading} style={{ padding: '6px 12px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', cursor: keywordLoading ? 'not-allowed' : 'pointer' }}>{keywordLoading ? '…' : 'Suggest keywords (NLP)'}</button>
-                {keywordSuggestions.length > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>{keywordSuggestions.join(', ')}</div>
-                )}
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Heading (main headline)</div>
-                <select
-                  value={headingFormat}
-                  onChange={e => setHeadingFormat(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--text)',
-                    fontSize: 12,
-                  }}
-                >
-                  {HEADING_FORMATS.map(f => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Subheading (section titles)</div>
-                <select
-                  value={subheadingFormat}
-                  onChange={e => setSubheadingFormat(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--text)',
-                    fontSize: 12,
-                  }}
-                >
-                  {SUBHEADING_FORMATS.map(f => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Paragraph tag (body)</div>
-                <select
-                  value={paragraphTag}
-                  onChange={e => setParagraphTag(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--text)',
-                    fontSize: 12,
-                  }}
-                >
-                  {PARAGRAPH_TAGS.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                  Custom prompt (optional)
-                </div>
-                <textarea
-                  value={customPrompt}
-                  onChange={e => setCustomPrompt(e.target.value)}
-                  placeholder="Override full-article prompt. Use {{LANGUAGE}}, {{TITLE}}, {{CONTENT}}"
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--text)',
-                    fontSize: 12,
-                    fontFamily: 'inherit',
-                    resize: 'vertical',
-                  }}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  onClick={handleStartRewrite}
-                  disabled={rewriteLoading}
-                  style={{
-                    padding: '8px 14px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    background: 'var(--accent-glow)',
-                    color: 'var(--accent-light)',
-                    border: '1px solid rgba(124,58,237,0.3)',
-                    borderRadius: 8,
-                    cursor: rewriteLoading ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {rewriteLoading ? <Loader2 size={14} style={{ animation: 'spin 0.6s linear infinite' }} /> : 'Start rewrite'}
+          {/* Settings form */}
+          <div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Settings2 size={10} /> AI SETTINGS
+            </div>
+            {settingsForm}
+
+            {/* Start buttons */}
+            {(article.status === 'APPROVED' || article.status === 'EXPORTED') && (passes.length === 0 || passes.every(p => p.status === 'IDLE')) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+                <button onClick={handleStartRewrite} disabled={rewriteLoading}
+                  style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%)', color: '#fff', border: 'none', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 2px 12px rgba(108,99,255,0.35)' }}>
+                  {rewriteLoading ? <Loader2 size={14} style={{ animation: 'spin 0.6s linear infinite' }} /> : <Zap size={14} />}
+                  Start Rewrite
                 </button>
-                <button
-                  onClick={handleStartWithFetch}
-                  disabled={rewriteLoading}
-                  style={{
-                    padding: '8px 14px',
-                    fontSize: 12,
-                    background: 'var(--surface)',
-                    color: 'var(--text-muted)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    cursor: rewriteLoading ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  Fetch full article & Start rewrite
+                <button onClick={handleStartWithFetch} disabled={rewriteLoading}
+                  style={{ width: '100%', padding: '9px 0', fontSize: 12, background: 'var(--card)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer' }}>
+                  Fetch full article & Rewrite
                 </button>
               </div>
-            </div>
-          )}
+            )}
 
-          {rewrite?.quality && (
-            <div style={{ padding: 14, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Quality</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 12 }}>
-                <span title="Word count">{rewrite.quality.wordCount} words</span>
-                <span title="Reading time">~{rewrite.quality.readTime} min read</span>
-                {rewrite.quality.fleschKincaid != null && <span title="Flesch-Kincaid (higher = easier)">Readability: {rewrite.quality.fleschKincaid}</span>}
-                {rewrite.quality.seoScore != null && <span title="SEO score">SEO: {rewrite.quality.seoScore}</span>}
-                {rewrite.quality.similarityPercent != null && <span title="Similarity to original (lower = more original)">Similarity: {rewrite.quality.similarityPercent}%</span>}
+            {/* Re-run row (when passes exist) */}
+            {passes.length > 0 && !passes.every(p => p.status === 'IDLE') && (
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button onClick={handleStartWithFetch}
+                  style={{ width: '100%', padding: '9px 0', fontSize: 12, fontWeight: 600, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 10, cursor: 'pointer' }}>
+                  Fetch & Re-run
+                </button>
+                <button onClick={handleRerunAll}
+                  style={{ width: '100%', padding: '9px 0', fontSize: 12, background: 'var(--card)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer' }}>
+                  ↺ Re-run All
+                </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
+          {/* Version history */}
           {passes.length > 0 && (
-            <div style={{ padding: 14, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Version history</div>
+            <div style={{ padding: 16 }}>
+              <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 10 }}>VERSION HISTORY</div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                <input type="text" value={versionLabel} onChange={e => setVersionLabel(e.target.value)} placeholder="Label (e.g. Draft 1)" style={{ flex: 1, padding: '6px 10px', fontSize: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
-                <button type="button" onClick={async () => { setVersionSaveLoading(true); try { await rewriteApi.versions.save(articleId, versionLabel || undefined); setVersions(await rewriteApi.versions.list(articleId)); setVersionLabel(''); mutate(); toast.success('Version saved'); } catch { toast.error('Failed to save'); } finally { setVersionSaveLoading(false); } }} disabled={versionSaveLoading} style={{ padding: '6px 12px', fontSize: 11, background: 'var(--accent-glow)', color: 'var(--accent-light)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 6, cursor: versionSaveLoading ? 'not-allowed' : 'pointer' }}>{versionSaveLoading ? '…' : 'Save version'}</button>
+                <input type="text" value={versionLabel} onChange={e => setVersionLabel(e.target.value)}
+                  placeholder="Label (e.g. Draft 1)"
+                  style={{ flex: 1, padding: '6px 10px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
+                <button type="button"
+                  onClick={async () => { setVersionSaveLoading(true); try { await rewriteApi.versions.save(articleId, versionLabel || undefined); setVersions(await rewriteApi.versions.list(articleId)); setVersionLabel(''); mutate(); toast.success('Version saved'); } catch { toast.error('Failed to save'); } finally { setVersionSaveLoading(false); } }}
+                  disabled={versionSaveLoading}
+                  style={{ padding: '6px 10px', fontSize: 11, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 6, cursor: versionSaveLoading ? 'not-allowed' : 'pointer' }}>
+                  {versionSaveLoading ? '…' : 'Save'}
+                </button>
               </div>
               {versions.length > 0 && (
-                <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: 11 }}>
-                  {versions.slice(0, 10).map(v => (
-                    <li key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--border)' }}>
-                      <span style={{ color: 'var(--text)' }}>{v.label} · {new Date(v.createdAt).toLocaleString()}</span>
-                      <button type="button" onClick={async () => { try { await rewriteApi.versions.restore(articleId, v.id); mutate(); toast.success('Restored'); setVersions(await rewriteApi.versions.list(articleId)); } catch { toast.error('Restore failed'); } }} style={{ padding: '4px 8px', fontSize: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer' }}>Restore</button>
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                  {versions.slice(0, 8).map(v => (
+                    <li key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderTop: '1px solid var(--border-subtle)', fontSize: 11 }}>
+                      <div>
+                        <div style={{ color: 'var(--text)', fontWeight: 500 }}>{v.label}</div>
+                        <div style={{ color: 'var(--text-dim)', fontSize: 10 }}>{new Date(v.createdAt).toLocaleString()}</div>
+                      </div>
+                      <button type="button"
+                        onClick={async () => { try { await rewriteApi.versions.restore(articleId, v.id); mutate(); toast.success('Restored'); setVersions(await rewriteApi.versions.list(articleId)); } catch { toast.error('Restore failed'); } }}
+                        style={{ padding: '3px 8px', fontSize: 10, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-dim)', cursor: 'pointer' }}>
+                        Restore
+                      </button>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
           )}
+        </aside>
 
-          {passes.length > 0 && !passes.every(p => p.status === 'IDLE') && (
-            <div
-              style={{
-                padding: 14,
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                marginBottom: 12,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Re-run with:</span>
-                  <select
-                    value={outputLanguage}
-                    onChange={e => setOutputLanguage(e.target.value)}
-                    style={{
-                      padding: '6px 10px',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 6,
-                      color: 'var(--text)',
-                      fontSize: 12,
-                    }}
-                  >
-                    {REWRITE_LANGUAGES.map(l => (
-                      <option key={l.value} value={l.value}>{l.label}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={headingFormat}
-                    onChange={e => setHeadingFormat(e.target.value)}
-                    style={{
-                      padding: '6px 10px',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 6,
-                      color: 'var(--text)',
-                      fontSize: 12,
-                    }}
-                  >
-                    {HEADING_FORMATS.map(f => (
-                      <option key={f.value} value={f.value}>{f.label}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={subheadingFormat}
-                    onChange={e => setSubheadingFormat(e.target.value)}
-                    style={{
-                      padding: '6px 10px',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 6,
-                      color: 'var(--text)',
-                      fontSize: 12,
-                    }}
-                  >
-                    {SUBHEADING_FORMATS.map(f => (
-                      <option key={f.value} value={f.value}>{f.label}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={paragraphTag}
-                    onChange={e => setParagraphTag(e.target.value)}
-                    style={{
-                      padding: '6px 10px',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 6,
-                      color: 'var(--text)',
-                      fontSize: 12,
-                    }}
-                  >
-                    {PARAGRAPH_TAGS.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
+        {/* ─── CENTER: Pass cards ─────────────────────────────────────────────── */}
+        <main style={{
+          flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+          overflowY: 'auto', overflowX: 'hidden',
+          WebkitOverflowScrolling: 'touch' as 'auto',
+        }}>
+          <div style={{ padding: '16px 16px 4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700 }}>
+                AI REWRITE PASSES
               </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Custom prompt (optional)</div>
-                <textarea
-                  value={customPrompt}
-                  onChange={e => setCustomPrompt(e.target.value)}
-                  placeholder="Override full-article prompt. Use {{LANGUAGE}}, {{TITLE}}, {{CONTENT}}"
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    background: 'var(--card)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--text)',
-                    fontSize: 12,
-                    fontFamily: 'inherit',
-                    resize: 'vertical',
-                  }}
-                />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <input type="checkbox" onChange={e => handleSelectAll(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+                Select all
+              </label>
+            </div>
+
+            {/* ── Mobile: Article card ─────────────────────────── */}
+            <div className="lg:hidden" style={{ marginBottom: 12 }}>
+              <div style={{ padding: 14, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12 }}>
+                {article.source?.name && (
+                  <span style={{ display: 'inline-block', fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'rgba(108,99,255,0.12)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', fontWeight: 700, marginBottom: 8 }}>
+                    {article.source.name}
+                  </span>
+                )}
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 6, lineHeight: 1.4 }}>
+                  {article.title}
+                  {article.wordCount != null && article.wordCount < 300 && (
+                    <span style={{ fontSize: 10, padding: '2px 6px', background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 4, fontWeight: 500, marginLeft: 8 }}>Thin &lt;300w</span>
+                  )}
+                </div>
+                {typeof article.url === 'string' && article.url.startsWith('http') && (
+                  <a href={article.url} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: 11, color: 'var(--cyan)', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {article.url}
+                  </a>
+                )}
+                {rewrite?.quality && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                    {[
+                      `${rewrite.quality.wordCount}w`,
+                      `~${rewrite.quality.readTime}min`,
+                      rewrite.quality.seoScore != null ? `SEO ${rewrite.quality.seoScore}` : null,
+                    ].filter(Boolean).map((q, i) => (
+                      <span key={i} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>{q}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-          )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              onChange={e => handleSelectAll(e.target.checked)}
-              style={{ accentColor: 'var(--accent)' }}
-            />
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Select all</span>
+            {/* ── Mobile: Settings accordion ─────────────────────── */}
+            <div className="lg:hidden" style={{ marginBottom: 12 }}>
+              <button onClick={() => setMobileSettingsOpen(o => !o)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: mobileSettingsOpen ? '10px 10px 0 0' : 10, cursor: 'pointer', color: 'var(--text-muted)' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}>
+                  <Settings2 size={14} style={{ color: 'var(--accent-light)' }} /> AI Settings
+                </span>
+                <ChevronDown size={16} style={{ transform: mobileSettingsOpen ? 'rotate(180deg)' : 'rotate(0)', transition: '0.2s' }} />
+              </button>
+              {mobileSettingsOpen && (
+                <div style={{ padding: '14px', background: 'var(--card)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 10px 10px' }}>
+                  {settingsForm}
+                  {(article.status === 'APPROVED' || article.status === 'EXPORTED') && (passes.length === 0 || passes.every(p => p.status === 'IDLE')) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+                      <button onClick={handleStartRewrite} disabled={rewriteLoading}
+                        style={{ width: '100%', padding: '12px 0', fontSize: 14, fontWeight: 700, background: 'linear-gradient(135deg,var(--accent),#8b5cf6)', color: '#fff', border: 'none', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 2px 12px rgba(108,99,255,0.35)' }}>
+                        {rewriteLoading ? <Loader2 size={16} style={{ animation: 'spin 0.6s linear infinite' }} /> : <Zap size={15} />}
+                        Start Rewrite
+                      </button>
+                      <button onClick={handleStartWithFetch} disabled={rewriteLoading}
+                        style={{ width: '100%', padding: '11px 0', fontSize: 13, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer' }}>
+                        Fetch full article & Rewrite
+                      </button>
+                    </div>
+                  )}
+                  {passes.length > 0 && !passes.every(p => p.status === 'IDLE') && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                      <button onClick={handleStartWithFetch}
+                        style={{ flex: 1, padding: '10px 0', fontSize: 12, fontWeight: 600, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 8, cursor: 'pointer' }}>
+                        Fetch & Re-run
+                      </button>
+                      <button onClick={handleRerunAll}
+                        style={{ flex: 1, padding: '10px 0', fontSize: 12, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+                        ↺ Re-run All
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Re-run options bar (desktop, when passes exist) ─────── */}
+            {passes.length > 0 && !passes.every(p => p.status === 'IDLE') && (
+              <div className="hidden lg:flex" style={{ alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 600, flexShrink: 0 }}>Re-run with:</span>
+                <select value={outputLanguage} onChange={e => setOutputLanguage(e.target.value)}
+                  style={{ padding: '5px 8px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+                  {REWRITE_LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                </select>
+                <select value={headingFormat} onChange={e => setHeadingFormat(e.target.value)}
+                  style={{ padding: '5px 8px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+                  {HEADING_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+                <select value={subheadingFormat} onChange={e => setSubheadingFormat(e.target.value)}
+                  style={{ padding: '5px 8px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+                  {SUBHEADING_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+                <select value={paragraphTag} onChange={e => setParagraphTag(e.target.value)}
+                  style={{ padding: '5px 8px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+                  {PARAGRAPH_TAGS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)}
+                  placeholder="Custom prompt override…" rows={1}
+                  style={{ flex: 1, minWidth: 140, padding: '5px 8px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontFamily: 'inherit', resize: 'none' }} />
+              </div>
+            )}
           </div>
 
+          {/* Error state */}
           {(rewriteError || startError) && (
-            <div
-              style={{
-                padding: 14,
-                background: 'var(--red-bg)',
-                border: '1px solid rgba(239,68,68,0.2)',
-                borderRadius: 10,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 10,
-              }}
-            >
-              <span style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600 }}>
+            <div style={{ margin: '0 16px 12px', padding: 14, background: 'var(--red-bg)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, marginBottom: 10 }}>
                 {startError || rewriteErrorMessage || 'Failed to load rewrite'}
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <select
-                  value={outputLanguage}
-                  onChange={e => setOutputLanguage(e.target.value)}
-                  style={{
-                    padding: '6px 10px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 6,
-                    color: 'var(--text)',
-                    fontSize: 11,
-                  }}
-                >
-                  {REWRITE_LANGUAGES.map(l => (
-                    <option key={l.value} value={l.value}>{l.label}</option>
-                  ))}
-                </select>
-                <select
-                  value={headingFormat}
-                  onChange={e => setHeadingFormat(e.target.value)}
-                  style={{
-                    padding: '6px 10px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 6,
-                    color: 'var(--text)',
-                    fontSize: 11,
-                  }}
-                >
-                  {HEADING_FORMATS.map(f => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
-                <select
-                  value={subheadingFormat}
-                  onChange={e => setSubheadingFormat(e.target.value)}
-                  style={{
-                    padding: '6px 10px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 6,
-                    color: 'var(--text)',
-                    fontSize: 11,
-                  }}
-                >
-                  {SUBHEADING_FORMATS.map(f => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
-                <select
-                  value={paragraphTag}
-                  onChange={e => setParagraphTag(e.target.value)}
-                  style={{
-                    padding: '6px 10px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 6,
-                    color: 'var(--text)',
-                    fontSize: 11,
-                  }}
-                >
-                  {PARAGRAPH_TAGS.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  onClick={handleStartWithFetch}
-                  style={{
-                    padding: '8px 14px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    background: 'var(--accent-glow)',
-                    color: 'var(--accent-light)',
-                    border: '1px solid rgba(124,58,237,0.3)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Fetch full article & Start rewrite
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <select value={outputLanguage} onChange={e => setOutputLanguage(e.target.value)}
+                  style={{ padding: '6px 8px', fontSize: 11, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+                  {REWRITE_LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                </select>
+                <button onClick={handleStartWithFetch}
+                  style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 6, cursor: 'pointer' }}>
+                  Fetch & Retry
                 </button>
-                <button
-                  onClick={handleRerunAll}
-                  style={{
-                    padding: '8px 14px',
-                    fontSize: 12,
-                    background: 'var(--surface)',
-                    color: 'var(--text-muted)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                  }}
-                >
+                <button onClick={handleRerunAll}
+                  style={{ padding: '6px 14px', fontSize: 11, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>
                   Re-run All
                 </button>
               </div>
             </div>
           )}
 
-          {passes.map((pass, i) => (
-            <RewritePassCard
-              key={pass.id}
-              pass={pass}
-              passNumber={i + 1}
-              selected={selectedPassIds.has(pass.id)}
-              onToggleSelect={() => handleToggleSelect(pass.id)}
-              onOutputChange={v => updatePassOutput(pass.id, v)}
-              onRerun={() => handleRerunSingle(pass.id)}
-              onReset={() => handleResetSingle(pass.id, pass.originalOutput)}
-            />
-          ))}
-        </div>
+          {/* Pass cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px 100px' }}>
+            {passes.map((pass, i) => (
+              <RewritePassCard
+                key={pass.id}
+                pass={pass}
+                passNumber={i + 1}
+                selected={selectedPassIds.has(pass.id)}
+                onToggleSelect={() => handleToggleSelect(pass.id)}
+                onOutputChange={v => updatePassOutput(pass.id, v)}
+                onRerun={() => handleRerunSingle(pass.id)}
+                onReset={() => handleResetSingle(pass.id, pass.originalOutput)}
+              />
+            ))}
+          </div>
 
-        {/* Mobile: publish panel inside scroll container so it's reachable */}
-        <div className="lg:hidden" style={{ padding: '0 0 16px' }}>
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: '1.5px',
-              textTransform: 'uppercase',
-              color: 'var(--text-dim)',
-              fontFamily: 'Geist Mono, monospace',
-              marginBottom: 12,
-            }}
-          >
-            ARTICLE STATUS
-          </div>
-          <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
-          <div style={{ marginTop: 12 }}>
-            <WPPublishPanel articleId={articleId} rewrite={rewrite} article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined} wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} onArticleUpdated={mutateArticle} />
-          </div>
-        </div>
-
-        {/* Publish panel - desktop */}
-        <div
-          className="hidden lg:block"
-          style={{
-            width: 330,
-            flexShrink: 0,
-            borderLeft: '1px solid var(--border)',
-            padding: 16,
-            overflowY: 'auto',
-            background: 'var(--surface)',
-          }}
-        >
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: '1.5px',
-              textTransform: 'uppercase',
-              color: 'var(--text-dim)',
-              fontFamily: 'Geist Mono, monospace',
-              marginBottom: 12,
-            }}
-          >
-            ARTICLE STATUS
-          </div>
-          <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
-          <div style={{ marginTop: 24 }}>
-            <WPPublishPanel
-              articleId={articleId}
-              rewrite={rewrite}
-              article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined}
-              wpPostId={article?.wpPostId}
-              onPublish={handlePublish}
-              onReject={handleReject}
-              onArticleUpdated={mutateArticle}
-            />
-          </div>
-          {/* Publish history */}
-          <div style={{ marginTop: 20 }}>
-            <div style={{ fontSize: 10, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-dim)', fontFamily: 'Geist Mono, monospace', marginBottom: 10 }}>
-              PUBLISH HISTORY
+          {/* Mobile: Status + Publish section (inside scroll) */}
+          <div className="lg:hidden" style={{ padding: '0 16px 24px' }}>
+            <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12 }}>ARTICLE STATUS</div>
+            <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
+            <div style={{ marginTop: 16 }}>
+              <WPPublishPanel
+                articleId={articleId} rewrite={rewrite}
+                article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined}
+                wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} onArticleUpdated={mutateArticle}
+              />
             </div>
+          </div>
+        </main>
+
+        {/* ─── DESKTOP RIGHT SIDEBAR: Status + Publish ─────────────────────── */}
+        <aside className="hidden lg:flex" style={{
+          width: 310, flexShrink: 0, flexDirection: 'column',
+          borderLeft: '1px solid var(--border)',
+          background: 'var(--surface)',
+          overflowY: 'auto',
+        }}>
+          <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12 }}>ARTICLE STATUS</div>
+            <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
+          </div>
+          <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
+            <WPPublishPanel
+              articleId={articleId} rewrite={rewrite}
+              article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined}
+              wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} onArticleUpdated={mutateArticle}
+            />
+          </div>
+          <div style={{ padding: 16 }}>
+            <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12 }}>PUBLISH HISTORY</div>
             <PublishHistory articleId={articleId} refreshKey={publishHistoryRefreshKey} />
           </div>
-        </div>
-      </div>
+        </aside>
 
-      {/* Mobile: sticky bottom bar — Start rewrite / Fetch when needed; Re-run & Quick Draft when passes exist */}
-      <div
-        className="lg:hidden"
-        style={{
-          position: 'sticky',
-          bottom: 0,
-          zIndex: 20,
-          padding: '12px 16px',
-          paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-          background: 'var(--bg)',
-          borderTop: '1px solid var(--border-subtle)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-        }}
-      >
-        {(article.status === 'APPROVED' || article.status === 'EXPORTED') && (passes.length === 0 || passes.every(p => p.status === 'IDLE')) ? (
-          <>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                onClick={handleStartRewrite}
-                disabled={rewriteLoading}
-                style={{
-                  flex: 1,
-                  minWidth: 120,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: 12,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  background: 'var(--accent-glow)',
-                  color: 'var(--accent-light)',
-                  border: '1px solid rgba(124,58,237,0.3)',
-                  borderRadius: 8,
-                  cursor: rewriteLoading ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {rewriteLoading ? <Loader2 size={16} style={{ animation: 'spin 0.6s linear infinite' }} /> : null}
-                Start rewrite
-              </button>
-              <button
-                onClick={handleStartWithFetch}
-                disabled={rewriteLoading}
-                style={{
-                  flex: 1,
-                  minWidth: 120,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: 12,
-                  fontSize: 13,
-                  background: 'var(--surface)',
-                  color: 'var(--text-muted)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  cursor: rewriteLoading ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Fetch full article & Start rewrite
-              </button>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
-              Choose language & format above, then start
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={handleRerunAll}
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  fontSize: 12,
-                  background: 'transparent',
-                  color: 'var(--text-muted)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                }}
-              >
-                ↺ Re-run All
-              </button>
-              <button
-                onClick={handleOpenPublishSheet}
-                disabled={!allDone}
-                style={{
-                  flex: 2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: 10,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  background: allDone ? 'linear-gradient(135deg, #00e5a0 0%, #00c48a 100%)' : 'var(--surface)',
-                  color: allDone ? '#fff' : 'var(--text-dim)',
-                  border: 'none',
-                  borderRadius: 8,
-                  opacity: allDone ? 1 : 0.45,
-                  cursor: allDone ? 'pointer' : 'not-allowed',
-                  boxShadow: allDone ? '0 4px 16px rgba(0,229,160,0.35)' : 'none',
-                }}
-              >
-                <Send size={14} />
-                {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
-              </button>
-            </div>
-          </>
-        )}
+      </div>{/* end BODY */}
+
+      {/* ═══ MOBILE: Sticky bottom bar ════════════════════════════════════════ */}
+      <div className="lg:hidden" style={{
+        position: 'sticky', bottom: 0, zIndex: 25,
+        padding: '10px 16px',
+        paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
+        background: 'rgba(8,12,20,0.95)', backdropFilter: 'blur(16px)',
+        borderTop: '1px solid var(--border)',
+        display: 'flex', gap: 10,
+      }}>
+        <button onClick={handleRerunAll}
+          style={{ flex: 1, padding: '11px 0', fontSize: 13, fontWeight: 600, background: 'var(--card)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <RotateCw size={14} /> Re-run
+        </button>
+        <button onClick={handleOpenPublishSheet} disabled={!allDone}
+          style={{ flex: 2, padding: '11px 0', fontSize: 14, fontWeight: 700, background: allDone ? 'linear-gradient(135deg,#00e5a0,#00b87a)' : 'var(--card)', color: allDone ? '#fff' : 'var(--text-dim)', border: 'none', borderRadius: 10, opacity: allDone ? 1 : 0.4, cursor: allDone ? 'pointer' : 'not-allowed', boxShadow: allDone ? '0 4px 18px rgba(0,229,160,0.4)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.2s' }}>
+          <Send size={15} />
+          {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
+        </button>
       </div>
 
       {lockModal}

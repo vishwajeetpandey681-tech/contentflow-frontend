@@ -74,7 +74,7 @@ export default function RewritePage() {
   const [quickDraftLoading, setQuickDraftLoading] = useState(false)
   const [topbarPublishLoading, setTopbarPublishLoading] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'editor' | 'cards'>('editor')
+  const [viewMode, setViewMode] = useState<'editor' | 'cards'>('cards')
   const [versions, setVersions] = useState<import('@/types/article').RewriteVersion[]>([])
   const [versionLabel, setVersionLabel] = useState('')
   const [versionSaveLoading, setVersionSaveLoading] = useState(false)

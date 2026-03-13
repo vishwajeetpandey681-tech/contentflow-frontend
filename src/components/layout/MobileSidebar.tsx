@@ -65,17 +65,19 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
         <Dialog.Overlay
           className="fixed inset-0 z-[100]"
           style={{
-            background: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(4px)',
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            transition: 'opacity 0.3s ease',
           }}
         />
         <Dialog.Content
-          className="fixed top-0 left-0 z-[101] flex h-full w-[260px] flex-col overflow-hidden"
+          className="fixed top-0 left-0 z-[101] flex h-full w-[280px] max-w-[85vw] flex-col overflow-hidden"
           style={{
             background: 'var(--surface)',
-            borderRight: '1px solid var(--border)',
-            boxShadow: '4px 0 24px rgba(0,0,0,0.3)',
-            animation: 'slideInLeft 0.2s ease',
+            borderRight: '1px solid var(--glass-border)',
+            boxShadow: '4px 0 24px rgba(0,0,0,0.4)',
+            animation: 'slideInLeft 0.3s ease',
           }}
           onEscapeKeyDown={() => onClose()}
           onPointerDownOutside={() => onClose()}

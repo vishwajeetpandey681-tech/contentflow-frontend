@@ -28,6 +28,7 @@ import { useSources } from '@/hooks/useSources'
 import { inboxApi, rewriteApi } from '@/lib/api'
 import { InboxStats } from '@/components/scraper/InboxStats'
 import { ArticleCard } from '@/components/scraper/ArticleCard'
+import { ArticleCardSkeleton } from '@/components/scraper/ArticleCardSkeleton'
 import { Spinner } from '@/components/ui/Spinner'
 import toast from 'react-hot-toast'
 import type { ArticleStatus } from '@/types/article'
@@ -63,6 +64,7 @@ function InboxTabContent({
   onRetryRewrite,
   onUpdatePost,
   onUnlink,
+  onUnpublish,
   showPublishedActions,
   selectedIds,
   onToggleSelect,
@@ -87,6 +89,7 @@ function InboxTabContent({
   onRetryRewrite?: (id: string) => void
   onUpdatePost?: (id: string) => void
   onUnlink?: (id: string) => void
+  onUnpublish?: (id: string) => void
   showPublishedActions?: boolean
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
@@ -129,7 +132,7 @@ function InboxTabContent({
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto p-3 md:p-4">
+    <div className="inbox-content-area flex flex-1 flex-col overflow-y-auto p-4 md:p-6">
       {error ? (
         <div
           style={{
@@ -161,43 +164,46 @@ function InboxTabContent({
           </button>
         </div>
       ) : loading ? (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 200,
-            gap: 10,
-            color: 'var(--text-muted)',
-            fontSize: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Spinner size={18} />
-            <span>Loading articles...</span>
+        <div className="p-4 md:p-6">
+          {/* Mobile: skeleton cards; Desktop: spinner */}
+          <div className="md:hidden grid grid-cols-1 gap-4">
+            {[1, 2, 3, 4].map(i => <ArticleCardSkeleton key={i} />)}
           </div>
-          {loadingHint && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: 12,
-                background: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                fontSize: 11,
-                color: 'var(--text-dim)',
-                textAlign: 'center',
-                maxWidth: 280,
-              }}
-            >
-              Taking longer than usual? Ensure the backend is running on port 4500.
-              <br />
-              <code style={{ fontSize: 10, marginTop: 4, display: 'block' }}>
-                cd contentflow-backend && node server.js
-              </code>
+          <div
+            className="hidden md:flex flex-col items-center justify-center"
+            style={{
+              height: 200,
+              gap: 10,
+              color: 'var(--text-muted)',
+              fontSize: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Spinner size={18} />
+              <span>Loading articles...</span>
             </div>
-          )}
+            {loadingHint && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  background: 'var(--card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  fontSize: 11,
+                  color: 'var(--text-dim)',
+                  textAlign: 'center',
+                  maxWidth: 280,
+                }}
+              >
+                Taking longer than usual? Ensure the backend is running on port 4500.
+                <br />
+                <code style={{ fontSize: 10, marginTop: 4, display: 'block' }}>
+                  cd contentflow-backend && node server.js
+                </code>
+              </div>
+            )}
+          </div>
         </div>
       ) : articles.length === 0 ? (
         <div
@@ -287,6 +293,7 @@ function InboxTabContent({
               onRetryRewrite={onRetryRewrite}
               onUpdatePost={onUpdatePost}
               onUnlink={onUnlink}
+              onUnpublish={onUnpublish}
               onMarkRead={onMarkRead}
               onMarkStar={onMarkStar}
               showActions={showActions}
@@ -429,6 +436,19 @@ export default function InboxPage() {
       refreshStats()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unlink failed')
+    }
+  }
+
+  const handleUnpublish = async (id: string) => {
+    if (!confirm('Unpublish this post from WordPress? It will be moved to Trash on your WordPress site.')) return
+    try {
+      const { publishApi } = await import('@/lib/api')
+      await publishApi.unpublish(id)
+      toast.success('Post unpublished from WordPress')
+      refresh()
+      refreshStats()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unpublish failed')
     }
   }
 
@@ -913,6 +933,7 @@ export default function InboxPage() {
             onRetryRewrite={handleRetryRewrite}
             onUpdatePost={handleUpdatePost}
             onUnlink={handleUnlink}
+            onUnpublish={handleUnpublish}
             showPublishedActions={tab === 'published'}
             selectedIds={activeTab === 'PENDING_REVIEW' ? selectedIds : undefined}
             onToggleSelect={activeTab === 'PENDING_REVIEW' ? handleToggleSelect : undefined}

@@ -1,7 +1,8 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { Menu, PanelLeft, PanelLeftClose, ChevronRight } from 'lucide-react'
+import Link from 'next/link'
+import { Menu, PanelLeft, PanelLeftClose, ChevronRight, Search, Bell } from 'lucide-react'
 import { BackendStatus } from '@/components/BackendStatus'
 import { useUIStore } from '@/lib/ui-store'
 
@@ -24,10 +25,12 @@ export default function Topbar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => 
 
   return (
     <div
-      className="flex h-[var(--topbar)] min-h-12 shrink-0 items-center gap-2 px-3"
+      className="flex h-[var(--topbar)] min-h-12 shrink-0 items-center gap-2 px-3 md:px-4"
       style={{
         background: 'var(--surface)',
         borderBottom: '1px solid var(--border)',
+        paddingLeft: 'max(16px, env(safe-area-inset-left))',
+        paddingRight: 'max(16px, env(safe-area-inset-right))',
       }}
     >
       {/* Hamburger — mobile only */}
@@ -36,14 +39,15 @@ export default function Topbar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => 
           type="button"
           onClick={onOpenMobileMenu}
           aria-label="Open menu"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg lg:hidden"
+          className="flex h-11 w-11 min-w-[44px] min-h-[44px] shrink-0 items-center justify-center rounded-xl lg:hidden"
           style={{
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            color: 'var(--text-muted)',
+            background: 'var(--glass)',
+            border: '1px solid var(--glass-border)',
+            color: 'var(--text)',
+            backdropFilter: 'blur(20px)',
           }}
         >
-          <Menu size={16} />
+          <Menu size={20} />
         </button>
       )}
 
@@ -75,42 +79,34 @@ export default function Topbar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => 
         {sidebarCollapsed ? <PanelLeft size={15} /> : <PanelLeftClose size={15} />}
       </button>
 
-      {/* Breadcrumb + page title */}
-      <div className="min-w-0 flex-1 flex items-center gap-1.5">
+      {/* Mobile: logo + title + search + bell */}
+      <div className="min-w-0 flex-1 flex items-center gap-2 lg:hidden">
+        <Link href="/scraper/inbox/" className="flex items-center gap-2 shrink-0 no-underline" style={{ color: 'inherit' }}>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold" style={{ background: 'linear-gradient(135deg, var(--accent) 0%, #5a52e8 100%)', color: '#fff', boxShadow: '0 2px 12px rgba(108,99,255,0.4)' }}>CF</div>
+          <span className="text-sm font-bold truncate" style={{ color: 'var(--text)', fontFamily: 'var(--font-heading)' }}>{meta.title}</span>
+        </Link>
+        <div className="flex-1 min-w-0" />
+        <button type="button" aria-label="Search" className="flex h-11 w-11 min-w-[44px] items-center justify-center rounded-xl lg:hidden" style={{ background: 'var(--glass)', border: '1px solid var(--glass-border)', color: 'var(--text-muted)' }}><Search size={18} /></button>
+        <button type="button" aria-label="Notifications" className="flex h-11 w-11 min-w-[44px] items-center justify-center rounded-xl lg:hidden" style={{ background: 'var(--glass)', border: '1px solid var(--glass-border)', color: 'var(--text-muted)' }}><Bell size={18} /></button>
+      </div>
+
+      {/* Desktop: Breadcrumb + page title */}
+      <div className="min-w-0 flex-1 hidden lg:flex items-center gap-1.5">
         {meta.section && (
           <>
-            <span
-              className="hidden text-[11px] lg:block"
-              style={{ color: 'var(--text-dim)', fontWeight: 500 }}
-            >
-              {meta.section}
-            </span>
-            <ChevronRight
-              size={12}
-              className="hidden lg:block"
-              style={{ color: 'var(--border-light)', flexShrink: 0 }}
-            />
+            <span className="text-[11px]" style={{ color: 'var(--text-dim)', fontWeight: 500 }}>{meta.section}</span>
+            <ChevronRight size={12} style={{ color: 'var(--border-light)', flexShrink: 0 }} />
           </>
         )}
         <div className="min-w-0">
-          <div
-            className="truncate text-[13px] font-semibold lg:text-[14px]"
-            style={{ color: 'var(--text)', letterSpacing: '-0.2px' }}
-          >
-            {meta.title}
-          </div>
-          <div
-            className="hidden text-[10px] lg:block"
-            style={{ color: 'var(--text-dim)', marginTop: 0 }}
-          >
-            {meta.sub}
-          </div>
+          <div className="truncate text-[13px] font-semibold lg:text-[14px]" style={{ color: 'var(--text)', letterSpacing: '-0.2px' }}>{meta.title}</div>
+          <div className="hidden text-[10px] lg:block" style={{ color: 'var(--text-dim)', marginTop: 0 }}>{meta.sub}</div>
         </div>
       </div>
 
-      {/* Backend status indicator */}
+      {/* Backend status indicator — desktop */}
       <div
-        className="flex items-center gap-2"
+        className="hidden lg:flex items-center gap-2"
         style={{
           background: 'var(--card)',
           border: '1px solid var(--border)',

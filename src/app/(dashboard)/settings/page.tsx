@@ -97,7 +97,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-1 overflow-auto" style={{ background: 'var(--bg)' }}>
-      <div className="flex-1 max-w-2xl p-4 md:p-6">
+      <div className="flex-1 max-w-2xl p-4 md:p-6" style={{ paddingLeft: 'max(16px, env(safe-area-inset-left))', paddingRight: 'max(16px, env(safe-area-inset-right))' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
           <div
             style={{
@@ -123,6 +123,7 @@ export default function SettingsPage() {
         </div>
 
         <div
+          className="settings-section-card"
           style={{
             padding: 20,
             background: 'var(--card)',
@@ -141,7 +142,7 @@ export default function SettingsPage() {
               marginBottom: 16,
             }}
           >
-            OpenAI
+            🤖 AI Settings
           </div>
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
@@ -213,6 +214,7 @@ export default function SettingsPage() {
         </div>
 
         <div
+          className="settings-section-card"
           style={{
             padding: 20,
             background: 'var(--card)',
@@ -297,6 +299,7 @@ export default function SettingsPage() {
         </div>
 
         <div
+          className="settings-section-card"
           style={{
             padding: 20,
             background: 'var(--card)',
@@ -425,6 +428,7 @@ export default function SettingsPage() {
 
         {/* Backend Status subsection */}
         <div
+          className="settings-section-card"
           style={{
             padding: 20,
             background: 'var(--card)',

@@ -209,14 +209,38 @@ export const publishApi = {
       status?: string
       categoryId?: string
       authorId?: string
-      tagNames?: string[]
+      tagIds?: number[]
       featuredMediaId?: number
       wordpressSiteId?: string
+      customTitle?: string
+      seoTitle?: string
+      seoMetaDesc?: string
+      scheduleDate?: string
     }
-  ) => api.post(`/publish/${articleId}/wordpress`, options),
+  ) => api.post<{ data: { id?: number; link?: string; status?: string; success?: boolean; _siteId?: string; _siteLabel?: string } }>(`/publish/${articleId}/wordpress`, options).then(r => r.data.data),
   /** Upload article's source image to WP Media. Returns { id, url }. */
   uploadSourceImage: (articleId: string, wordpressSiteId?: string) =>
     api.post<{ data: { id: number; url: string } }>(`/publish/${articleId}/upload-source-image`, { wordpressSiteId }).then(r => r.data.data),
+  unpublish: (articleId: string, wordpressSiteId?: string) =>
+    api.post<{ data: { success: boolean } }>(`/publish/${articleId}/unpublish`, { wordpressSiteId }).then(r => r.data.data),
+  history: (articleId: string) =>
+    api.get<{ data: WpPublishHistoryEntry[] }>(`/publish/${articleId}/history`).then(r => r.data.data),
+  wpStatus: (articleId: string, siteId?: string) =>
+    api.get<{ data: { published: boolean; postId?: number; status?: string; link?: string; title?: string } }>(`/publish/${articleId}/wp-status`, { params: siteId ? { siteId } : {} }).then(r => r.data.data),
+}
+
+export interface WpPublishHistoryEntry {
+  id: string
+  siteId: string
+  siteLabel: string
+  siteUrl?: string
+  attemptedAt: string
+  publishedAt?: string
+  status: 'published' | 'draft' | 'scheduled' | 'failed' | 'unpublished' | 'pending'
+  postId?: number | null
+  postUrl?: string | null
+  title?: string
+  error?: string | null
 }
 
 export const wpMetaApi = {

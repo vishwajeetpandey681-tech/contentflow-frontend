@@ -20,7 +20,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <div
-      className="dashboard-shell flex h-[100dvh] overflow-hidden"
+      className="dashboard-shell flex h-[100dvh] overflow-hidden mobile-bg-mesh"
       style={{ background: 'var(--bg)', position: 'relative' }}
     >
       {/* Desktop sidebar — hidden below lg; collapsible on lg+ */}

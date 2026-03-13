@@ -74,6 +74,9 @@ export interface ScraperArticle {
   rewriteStatus?: RewriteStatus
   rewrite?:      ArticleRewrite
   wpPostId?:     number | null
+  wpPostUrl?:    string | null
+  wpPublishes?:  Record<string, number>
+  wpPublishHistory?: import('@/lib/api').WpPublishHistoryEntry[]
   assignedTo?:   string | null
   assignedToName?: string | null
   assignedAt?:   string | null

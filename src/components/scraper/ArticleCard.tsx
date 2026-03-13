@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, X, RotateCw, AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Loader2, Pencil, Unlink, Lock, Star, Circle } from 'lucide-react'
+import { Check, X, RotateCw, AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Loader2, Pencil, Unlink, Lock, Star, Circle, Globe } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { timeAgo } from '@/lib/utils'
@@ -20,6 +20,7 @@ interface ArticleCardProps {
   onRetryRewrite?: (id: string) => void
   onUpdatePost?: (id: string) => void
   onUnlink?: (id: string) => void
+  onUnpublish?: (id: string) => void
   showActions?: boolean
   showPublishedActions?: boolean
   selected?: boolean
@@ -37,6 +38,7 @@ export function ArticleCard({
   onRetryRewrite,
   onUpdatePost,
   onUnlink,
+  onUnpublish,
   showActions = false,
   showPublishedActions = false,
   selected = false,
@@ -471,22 +473,44 @@ export function ArticleCard({
               {statusLabel[article.status] || article.status}
             </span>
             {article.wpPostId && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  fontSize: 10,
-                  padding: '2px 6px',
-                  borderRadius: 5,
-                  background: 'rgba(34,211,238,0.15)',
-                  color: 'var(--cyan)',
-                  border: '1px solid rgba(34,211,238,0.2)',
-                  fontFamily: 'Geist Mono, monospace',
-                }}
-              >
-                WP #{article.wpPostId}
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 10,
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    background: 'rgba(0,229,160,0.12)',
+                    color: '#00e5a0',
+                    border: '1px solid rgba(0,229,160,0.25)',
+                    fontFamily: 'Geist Mono, monospace',
+                    fontWeight: 600,
+                  }}
+                >
+                  <Globe size={9} style={{ display: 'inline' }} />
+                  🌐 Published
+                </span>
+                {article.wpPostUrl && (
+                  <a
+                    href={article.wpPostUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                      fontSize: 9,
+                      color: 'var(--text-dim)',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <ExternalLink size={8} /> View Live
+                  </a>
+                )}
+              </div>
             )}
             {/* PENDING: Approve + Reject */}
             {showActions && (
@@ -531,8 +555,8 @@ export function ArticleCard({
                 </button>
               </div>
             )}
-            {/* PUBLISHED: Update post & Unlink */}
-            {showPublishedActions && article.wpPostId && onUpdatePost && onUnlink && (
+            {/* PUBLISHED: Update post & Unlink/Unpublish */}
+            {showPublishedActions && article.wpPostId && onUpdatePost && (
               <div className="flex gap-1" style={{ marginTop: 4 }}>
                 <button
                   onClick={() => onUpdatePost(article.id)}
@@ -551,8 +575,21 @@ export function ArticleCard({
                   }}
                 >
                   <Pencil size={12} />
-                  Update post
+                  Update
                 </button>
+                {onUnpublish && (
+                  <button
+                    onClick={() => onUnpublish(article.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px',
+                      background: 'var(--red-bg)', color: 'var(--red)',
+                      border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, fontSize: 11, cursor: 'pointer',
+                    }}
+                  >
+                    <Unlink size={12} /> Unpublish
+                  </button>
+                )}
+                {onUnlink && !onUnpublish && (
                 <button
                   onClick={() => onUnlink(article.id)}
                   style={{
@@ -571,6 +608,7 @@ export function ArticleCard({
                   <Unlink size={12} />
                   Unlink
                 </button>
+                )}
               </div>
             )}
             {/* APPROVED: action button by rewrite status */}

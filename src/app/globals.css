@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
 
 :root {
   color-scheme: dark;
@@ -49,10 +50,64 @@
   --bg-secondary: #0f0f12;
 }
 
+/* Mobile design system (wireframe) — applied below 768px */
 @media (max-width: 767px) {
+  .mobile-bg-mesh {
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 0%, rgba(108,99,255,0.15) 0%, transparent 50%),
+      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(0,212,255,0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 50% 30% at 50% 50%, rgba(255,107,157,0.06) 0%, transparent 50%),
+      var(--bg);
+  }
   :root {
     --sidebar: 280px;
+    --bg: #080c14;
+    --accent: #6c63ff;
+    --accent2: #00d4ff;
+    --accent3: #ff6b9d;
+    --success: #00e5a0;
+    --warning: #ffb347;
+    --text: #e8eaf6;
+    --glass: rgba(255,255,255,0.04);
+    --glass-border: rgba(255,255,255,0.08);
+    --font-heading: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --radius-card: 16px;
+    --transition-fast: 0.2s ease;
+    --transition-mid: 0.3s ease;
   }
+  body {
+    font-family: var(--font-body);
+    font-size: 14px;
+  }
+}
+
+/* Glass utility */
+.glass {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(20px);
+}
+.glass-border { border-color: rgba(255,255,255,0.08); }
+
+/* Card hover: translateX(4px) on mobile */
+@media (max-width: 767px) {
+  .mobile-card-hover {
+    transition: transform var(--transition-mid), background var(--transition-fast), border-color var(--transition-fast);
+  }
+  .mobile-card-hover:active {
+    transform: translateX(4px);
+  }
+}
+
+/* Button gradient glow (mobile) */
+.btn-gradient-glow {
+  background: linear-gradient(135deg, var(--accent) 0%, #5a52e8 100%);
+  box-shadow: 0 4px 16px rgba(108,99,255,0.4);
+}
+.btn-success-glow {
+  background: linear-gradient(135deg, var(--success) 0%, #00c48a 100%);
+  box-shadow: 0 4px 16px rgba(0,229,160,0.35);
 }
 
 /* Touch-friendly nav */
@@ -143,10 +198,42 @@
   .dashboard-shell main { min-width: 0; }
 }
 
-/* Mobile: Article card - actions full-width row below body */
+/* Mobile: Article card - wireframe design */
 @media (max-width: 767px) {
   .article-card .flex.flex-row { flex-wrap: wrap; }
   .article-card-actions { flex-basis: 100% !important; flex-direction: row !important; flex-wrap: wrap !important; justify-content: flex-start !important; align-items: center !important; gap: 8px !important; padding-top: 8px !important; margin-top: 8px !important; border-top: 1px solid var(--border) !important; }
+  .article-card {
+    border-radius: var(--radius-card, 16px) !important;
+    background: var(--glass) !important;
+    border-color: var(--glass-border) !important;
+    backdrop-filter: blur(20px);
+  }
+  .inbox-content-area { padding-left: max(16px, env(safe-area-inset-left)) !important; padding-right: max(16px, env(safe-area-inset-right)) !important; }
+}
+
+/* Mobile: hide stats bar, use tabs as primary filter */
+@media (max-width: 767px) {
+  .inbox-stats-mobile-hide { display: none !important; }
+}
+
+/* Mobile: Settings — glass section cards, full-width inputs */
+@media (max-width: 767px) {
+  .settings-section-card {
+    background: rgba(255,255,255,0.04) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 16px !important;
+    backdrop-filter: blur(20px);
+  }
+  .settings-section-card input,
+  .settings-section-card select {
+    font-size: 16px !important; /* prevents iOS zoom on focus */
+    min-height: 44px !important;
+  }
+}
+
+/* Mobile: sticky bottom bar safe area */
+.sticky-bottom-safe {
+  padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
 }
 
 /* Library tab — full-width grid, responsive columns */
@@ -376,6 +463,15 @@ button, a, [role="button"] {
 @keyframes shimmer {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+@keyframes shimmer-bg {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--glass) 25%, rgba(255,255,255,0.08) 50%, var(--glass) 75%);
+  background-size: 200% 100%;
+  animation: shimmer-bg 1.5s ease-in-out infinite;
 }
 
 @keyframes breathe {

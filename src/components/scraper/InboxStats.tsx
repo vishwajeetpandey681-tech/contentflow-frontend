@@ -52,7 +52,7 @@ const statConfig = [
 export function InboxStats({ stats = { pending: 0, approved: 0, rejected: 0, failed: 0, published: 0 } }: InboxStatsProps) {
   return (
     <div
-      className="grid grid-cols-2 gap-2 border-b p-3 md:grid-cols-4 md:gap-2 md:p-3 lg:grid-cols-5"
+      className="inbox-stats-mobile-hide grid grid-cols-2 gap-2 border-b p-3 md:grid-cols-4 md:gap-2 md:p-3 lg:grid-cols-5"
       style={{
         borderColor: 'var(--border)',
         flexShrink: 0,
@@ -109,14 +109,7 @@ export function InboxStats({ stats = { pending: 0, approved: 0, rejected: 0, fai
             }}>
               {label}
             </div>
-            <div style={{
-              fontSize: 10,
-              color: 'var(--text-dim)',
-              marginTop: 2,
-              display: 'none',
-            }}
-              className="lg:block"
-            >
+            <div className="hidden lg:block" style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
               {sub}
             </div>
           </div>

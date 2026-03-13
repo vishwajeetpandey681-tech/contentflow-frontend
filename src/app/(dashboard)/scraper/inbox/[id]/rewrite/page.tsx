@@ -15,6 +15,8 @@ import { WPPublishPanel } from '@/components/scraper/WPPublishPanel'
 import { RewritePipelineStrip } from '@/components/scraper/RewritePipelineStrip'
 import { RewriteEditorLayout } from '@/components/scraper/RewriteEditorLayout'
 import { REWRITE_LANGUAGES, HEADING_FORMATS, SUBHEADING_FORMATS, PARAGRAPH_TAGS, REWRITE_TONES, REWRITE_AUDIENCES } from '@/lib/rewrite-options'
+import { PrePublishSheet } from '@/components/scraper/PrePublishSheet'
+import { PublishHistory } from '@/components/scraper/PublishHistory'
 import toast from 'react-hot-toast'
 import type { ScraperArticle } from '@/types/article'
 
@@ -66,6 +68,8 @@ export default function RewritePage() {
   const [versions, setVersions] = useState<import('@/types/article').RewriteVersion[]>([])
   const [versionLabel, setVersionLabel] = useState('')
   const [versionSaveLoading, setVersionSaveLoading] = useState(false)
+  const [publishSheetOpen, setPublishSheetOpen] = useState(false)
+  const [publishHistoryRefreshKey, setPublishHistoryRefreshKey] = useState(0)
   const [headlineSuggestions, setHeadlineSuggestions] = useState<string[]>([])
   const [headlineLoading, setHeadlineLoading] = useState(false)
   const [keywordSuggestions, setKeywordSuggestions] = useState<string[]>([])
@@ -307,6 +311,11 @@ export default function RewritePage() {
     }
   }
 
+  const handleOpenPublishSheet = () => {
+    if (!allDone) { toast.error('Complete all rewrite passes first'); return }
+    setPublishSheetOpen(true)
+  }
+
   const handleReject = async () => {
     try {
       await inboxApi.reject(articleId)
@@ -497,16 +506,8 @@ export default function RewritePage() {
         ↺ Re-run All
       </button>
       <button
-        onClick={async () => {
-          if (!allDone) return
-          setTopbarPublishLoading(true)
-          try {
-            await handlePublish({ status: 'draft', categoryId: '', authorId: '' })
-          } finally {
-            setTopbarPublishLoading(false)
-          }
-        }}
-        disabled={!allDone || topbarPublishLoading}
+        onClick={handleOpenPublishSheet}
+        disabled={!allDone}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -514,15 +515,16 @@ export default function RewritePage() {
           padding: '6px 12px',
           fontSize: 11,
           fontWeight: 600,
-          background: allDone ? 'var(--green)' : 'var(--surface)',
+          background: allDone ? 'linear-gradient(135deg, var(--green) 0%, #00c48a 100%)' : 'var(--surface)',
           color: allDone ? '#fff' : 'var(--text-dim)',
           border: '1px solid var(--border)',
           borderRadius: 6,
-          cursor: allDone && !topbarPublishLoading ? 'pointer' : 'not-allowed',
+          cursor: allDone ? 'pointer' : 'not-allowed',
+          boxShadow: allDone ? '0 2px 8px rgba(0,229,160,0.3)' : 'none',
         }}
       >
-        {topbarPublishLoading ? <Loader2 size={12} style={{ animation: 'spin 0.6s linear infinite' }} /> : <Send size={12} />}
-        {article.wpPostId ? 'Republish →' : 'Publish to WP →'}
+        <Send size={12} />
+        {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
       </button>
     </div>
   )
@@ -1254,6 +1256,13 @@ export default function RewritePage() {
               onArticleUpdated={mutateArticle}
             />
           </div>
+          {/* Publish history */}
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: 10, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-dim)', fontFamily: 'Geist Mono, monospace', marginBottom: 10 }}>
+              PUBLISH HISTORY
+            </div>
+            <PublishHistory articleId={articleId} refreshKey={publishHistoryRefreshKey} />
+          </div>
         </div>
       </div>
 
@@ -1344,47 +1353,47 @@ export default function RewritePage() {
                 ↺ Re-run All
               </button>
               <button
-                onClick={handleQuickDraft}
-                disabled={!allDone || quickDraftLoading}
+                onClick={handleOpenPublishSheet}
+                disabled={!allDone}
                 style={{
-                  flex: 1,
+                  flex: 2,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 6,
                   padding: 10,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: allDone ? 'var(--green)' : 'var(--surface)',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  background: allDone ? 'linear-gradient(135deg, #00e5a0 0%, #00c48a 100%)' : 'var(--surface)',
                   color: allDone ? '#fff' : 'var(--text-dim)',
-                  border: '1px solid var(--border)',
+                  border: 'none',
                   borderRadius: 8,
-                  opacity: allDone && !quickDraftLoading ? 1 : 0.45,
-                  cursor: allDone && !quickDraftLoading ? 'pointer' : 'not-allowed',
+                  opacity: allDone ? 1 : 0.45,
+                  cursor: allDone ? 'pointer' : 'not-allowed',
+                  boxShadow: allDone ? '0 4px 16px rgba(0,229,160,0.35)' : 'none',
                 }}
               >
-                {quickDraftLoading ? (
-                  <Loader2 size={16} style={{ animation: 'spin 0.6s linear infinite' }} />
-                ) : (
-                  'Quick Draft →'
-                )}
+                <Send size={14} />
+                {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
               </button>
-            </div>
-            <div
-              style={{
-                textAlign: 'center',
-                fontSize: 10,
-                fontFamily: 'Geist Mono, monospace',
-                color: 'var(--text-muted)',
-              }}
-            >
-              Publishes as draft
             </div>
           </>
         )}
       </div>
 
       {lockModal}
+
+      <PrePublishSheet
+        open={publishSheetOpen}
+        article={article}
+        rewrite={rewrite}
+        onClose={() => setPublishSheetOpen(false)}
+        onPublished={() => {
+          setPublishSheetOpen(false)
+          setPublishHistoryRefreshKey(k => k + 1)
+          mutate()
+        }}
+      />
     </div>
   )
 }

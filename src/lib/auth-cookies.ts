@@ -3,15 +3,19 @@ const STUDIO = 'csr_token'
 const CMS = 'cms_token'
 const MAX_AGE = 60 * 60 * 24 * 7
 
+function secureAttr() {
+  return typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : ''
+}
+
 function setCookie(name: string, value: string, maxAge: number) {
   if (typeof document === 'undefined') return
   const enc = encodeURIComponent(value)
-  document.cookie = `${name}=${enc}; path=/; max-age=${maxAge}; SameSite=Lax`
+  document.cookie = `${name}=${enc}; path=/; max-age=${maxAge}; SameSite=Lax${secureAttr()}`
 }
 
 function clearCookie(name: string) {
   if (typeof document === 'undefined') return
-  document.cookie = `${name}=; path=/; max-age=0`
+  document.cookie = `${name}=; path=/; max-age=0${secureAttr()}`
 }
 
 export function setStudioAuthCookie(token: string | null) {

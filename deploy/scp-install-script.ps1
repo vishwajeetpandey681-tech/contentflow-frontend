@@ -5,11 +5,14 @@ param(
   [string] $User = "root"
 )
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$src = Join-Path $here "vps-install.sh"
-if (-not (Test-Path $src)) { throw "Missing $src" }
-scp $src "${User}@${Server}:/root/vps-install.sh"
+foreach ($f in @("vps-install.sh", "charcha-express-install.sh")) {
+  $src = Join-Path $here $f
+  if (-not (Test-Path $src)) { throw "Missing $src" }
+  scp $src "${User}@${Server}:/root/$f"
+}
 Write-Host ""
-Write-Host "Next, SSH in and run (set your real API URL):"
+Write-Host "Next, SSH in and run:"
 Write-Host "  ssh ${User}@${Server}"
-Write-Host "  chmod +x /root/vps-install.sh"
-Write-Host '  NEXT_PUBLIC_API_URL="https://YOUR-BACKEND/api" bash /root/vps-install.sh'
+Write-Host '  chmod +x /root/vps-install.sh /root/charcha-express-install.sh'
+Write-Host '  bash /root/charcha-express-install.sh'
+Write-Host '  (override env vars before bash if your URLs differ from Charcha Express defaults.)'

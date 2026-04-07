@@ -1,0 +1,5 @@
+# Optional: expose the app only on 127.0.0.1 so Nginx/Caddy on the same VPS is the public entry.
+services:
+  web:
+    ports:
+      - "127.0.0.1:3000:3000"

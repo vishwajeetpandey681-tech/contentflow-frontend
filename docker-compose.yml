@@ -1,8 +1,8 @@
-# Example: copy to the server, set .env.production, then:
+# Charcha Express: copy .env.production.example → .env.production, then:
 #   docker compose --env-file .env.production up -d --build
 #
-# Required in .env.production (or export before compose):
-#   NEXT_PUBLIC_API_URL=https://your-backend.example.com/api
+# Bind only on localhost (Nginx on same host): use both files:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.bind-localhost.yml --env-file .env.production up -d --build
 
 services:
   web:
@@ -19,3 +19,15 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000/',(r)=>{r.resume();process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

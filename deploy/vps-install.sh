@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # Run ON the VPS as root (after SSH login). Docker + Compose required.
 #
-# 1) Set your backend API URL (must end with /api if your backend uses /api routes):
-#    export NEXT_PUBLIC_API_URL="https://YOUR-BACKEND/api"
-#    Optional:
-#    export NEXT_PUBLIC_APP_URL="https://YOUR-FRONTEND-DOMAIN"
-#    export NEXT_PUBLIC_WEBSITE_URL="https://YOUR-FRONTEND-DOMAIN"
+# 1) Set your backend API URL (must include /api, e.g. https://backend.example.com/api).
+#    Optional (same public host for user site + /cms):
+#    export NEXT_PUBLIC_APP_URL="https://charchaexpress.com"
+#    export NEXT_PUBLIC_WEBSITE_URL="https://charchaexpress.com"
+#    export NEXT_PUBLIC_WEBSITE_DOMAIN="charchaexpress.com"
+#
+# Charcha Express one-liner:
+#   NEXT_PUBLIC_API_URL=https://backend.charchaexpress.com/api \
+#   NEXT_PUBLIC_APP_URL=https://charchaexpress.com \
+#   NEXT_PUBLIC_WEBSITE_URL=https://charchaexpress.com \
+#   NEXT_PUBLIC_WEBSITE_DOMAIN=charchaexpress.com \
+#   bash /root/vps-install.sh
 #
 # 2) Copy this script to the server, or clone the repo and run from repo:
 #    curl -fsSL ...   # or: git clone then bash deploy/vps-install.sh
@@ -62,6 +69,7 @@ ENV_FILE="$APP_DIR/.env.production"
   echo "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
   echo "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-}"
   echo "NEXT_PUBLIC_WEBSITE_URL=${NEXT_PUBLIC_WEBSITE_URL:-}"
+  echo "NEXT_PUBLIC_WEBSITE_DOMAIN=${NEXT_PUBLIC_WEBSITE_DOMAIN:-}"
 } >"$ENV_FILE"
 chmod 600 "$ENV_FILE"
 

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { inboxApi } from '@/lib/api'
+import { inboxApi, type InboxListParams } from '@/lib/api'
 import type { ScraperArticle, ArticleStatus } from '@/types/article'
+
+type InboxListFn = (params: InboxListParams) => ReturnType<typeof inboxApi.list>
 
 const LIMIT_OPTIONS = [10, 30, 50, 100] as const
 
@@ -15,8 +17,12 @@ export function useInbox(
   activeSourcesOnly = false,
   sourceId = '',
   isRead?: boolean,
-  isStarred?: boolean
+  isStarred?: boolean,
+  trendingOnly = false,
+  opts?: { list?: InboxListFn; keyPrefix?: string }
 ) {
+  const listArticles = opts?.list ?? inboxApi.list.bind(inboxApi)
+  const keyPrefix = opts?.keyPrefix ?? 'studio'
   const [articles, setArticles] = useState<ScraperArticle[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -25,7 +31,7 @@ export function useInbox(
   const [error, setError] = useState<string | null>(null)
   const fetchIdRef = useRef(0)
 
-  const key = `inbox-${status}-${search}-${limit}-${category}-${fromDate}-${toDate}-${published}-${activeSourcesOnly}-${sourceId}-${isRead}-${isStarred}`
+  const key = `inbox-${status}-${search}-${limit}-${category}-${fromDate}-${toDate}-${published}-${activeSourcesOnly}-${sourceId}-${isRead}-${isStarred}-${trendingOnly}`
 
   const fetchPage = useCallback(async (p: number, append: boolean) => {
     const id = ++fetchIdRef.current
@@ -33,7 +39,7 @@ export function useInbox(
     else setLoadingMore(true)
     setError(null)
     try {
-      const res = await inboxApi.list({
+      const res = await listArticles({
         status,
         page: p,
         limit,
@@ -46,6 +52,7 @@ export function useInbox(
         sourceId: sourceId || undefined,
         isRead: isRead !== undefined ? isRead : undefined,
         isStarred: isStarred !== undefined ? isStarred : undefined,
+        trendingOnly: trendingOnly || undefined,
       })
       if (id !== fetchIdRef.current) return
       const data = (res.data?.data ?? res.data ?? []) as ScraperArticle[]
@@ -69,7 +76,7 @@ export function useInbox(
         setLoadingMore(false)
       }
     }
-  }, [status, search, limit, category, fromDate, toDate, published, activeSourcesOnly, sourceId, isRead, isStarred])
+  }, [status, search, limit, category, fromDate, toDate, published, activeSourcesOnly, sourceId, isRead, isStarred, trendingOnly, listArticles])
 
   useEffect(() => {
     setPage(1)

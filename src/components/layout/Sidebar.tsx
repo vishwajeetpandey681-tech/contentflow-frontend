@@ -2,20 +2,24 @@
 import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Rss, Inbox, Settings, Newspaper, Zap, LogOut, X, User, Users, FolderOpen } from 'lucide-react'
+import { Rss, Inbox, Settings, Newspaper, Zap, LogOut, X, User, Users, FolderOpen, CheckSquare, TrendingUp } from 'lucide-react'
 import { useSources } from '@/hooks/useSources'
 import { useStats } from '@/hooks/useStats'
+import { useApprovalStats } from '@/hooks/useApprovalStats'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasPermission } from '@/lib/permissions'
 
-const navItems: Array<{
+const baseNavItems: Array<{
   section: string
-  items: Array<{ label: string; href: string; icon: typeof Rss; soon?: boolean; badge?: 'sources' | 'pending' }>
+  items: Array<{ label: string; href: string; icon: typeof Rss; soon?: boolean; badge?: 'sources' | 'pending' | 'approval' }>
 }> = [
   {
     section: 'Scraper',
     items: [
       { label: 'Sources', href: '/scraper/',       icon: Rss,       badge: 'sources' },
       { label: 'Inbox',   href: '/scraper/inbox/', icon: Inbox,     badge: 'pending' },
+      { label: 'Trends',  href: '/scraper/trends/', icon: TrendingUp },
+      { label: 'Approval', href: '/approval/',     icon: CheckSquare, badge: 'approval' },
     ],
   },
   {
@@ -31,7 +35,6 @@ const navItems: Array<{
     items: [
       { label: 'Settings', href: '/settings/', icon: Settings },
       { label: 'Profile', href: '/profile/', icon: User },
-      { label: 'Team', href: '/team/', icon: Users },
     ],
   },
 ]
@@ -54,8 +57,17 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
   const { sources = [] } = useSources()
   const { stats = { pending: 0, approved: 0, rejected: 0, failed: 0 } } = useStats()
+  const { stats: approvalStats } = useApprovalStats(30000)
   const user = useAuthStore(s => s.user)
   const clearAuth = useAuthStore(s => s.clearAuth)
+
+  const showTeam = hasPermission(user?.role, 'studio', 'team')
+  const navItems = baseNavItems.map((block, i) => {
+    if (i !== baseNavItems.length - 1) return block
+    const systemItems = [...block.items]
+    if (showTeam) systemItems.push({ label: 'Team', href: '/settings/team/', icon: Users })
+    return { ...block, items: systemItems }
+  })
 
   return (
     <aside style={{
@@ -244,6 +256,17 @@ export default function Sidebar({ onClose }: SidebarProps) {
                         fontWeight: 600,
                         border: '1px solid rgba(245,158,11,0.2)',
                       }}>{stats.pending}</span>
+                    ) : (item.badge === 'approval' && (approvalStats?.pending ?? 0) > 0) ? (
+                      <span style={{
+                        fontSize: 10,
+                        padding: '1px 7px',
+                        borderRadius: 20,
+                        background: (approvalStats?.pending ?? 0) > 5 ? 'var(--red)' : 'var(--amber-bg)',
+                        color: (approvalStats?.pending ?? 0) > 5 ? '#fff' : 'var(--amber)',
+                        fontFamily: 'Geist Mono, monospace',
+                        fontWeight: 600,
+                        border: (approvalStats?.pending ?? 0) > 5 ? '1px solid var(--red)' : '1px solid rgba(245,158,11,0.2)',
+                      }}>{approvalStats?.pending}</span>
                     ) : item.soon ? (
                       <span style={{
                         fontSize: 9,
@@ -270,6 +293,28 @@ export default function Sidebar({ onClose }: SidebarProps) {
         borderTop: '1px solid var(--border)',
         background: 'rgba(0,0,0,0.1)',
       }}>
+        {user?.access?.includes('cms') && (
+          <Link
+            href="/cms/inbox/"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              padding: '8px 10px',
+              borderRadius: 8,
+              marginBottom: 8,
+              textDecoration: 'none',
+              background: 'rgba(204,0,0,0.1)',
+              border: '1px solid rgba(204,0,0,0.2)',
+              color: '#f87171',
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          >
+            📰 CMS
+          </Link>
+        )}
         <Link
           href="/profile/"
           style={{
@@ -315,6 +360,11 @@ export default function Sidebar({ onClose }: SidebarProps) {
             }}>
               {user?.email || ''}
             </div>
+            {user?.role && (
+              <div style={{ fontSize: 9, color: 'var(--text-dim)', textTransform: 'capitalize', marginTop: 2 }}>
+                {(user.role || '').replace(/_/g, ' ')} · Studio
+              </div>
+            )}
           </div>
         </Link>
 

@@ -9,9 +9,12 @@ import { useUIStore } from '@/lib/ui-store'
 const pageMeta: Record<string, { title: string; sub: string; section?: string }> = {
   '/scraper/':        { title: 'Sources',   sub: 'Manage your RSS feeds and listing pages', section: 'Scraper' },
   '/scraper/inbox/':  { title: 'Inbox',     sub: 'Review and approve pulled articles',      section: 'Scraper' },
+  '/scraper/trends/': { title: 'Trends',    sub: 'Google Trends keywords and traffic',       section: 'Scraper' },
+  '/approval/':       { title: 'Approval',  sub: 'Auto-approve and human review queue',      section: 'Scraper' },
   '/wordpress/':      { title: 'WordPress', sub: 'Your connected WordPress sites',          section: 'Publishing' },
   '/files/':          { title: 'File Manager', sub: 'Add, fetch, delete WordPress media', section: 'Publishing' },
   '/settings/':       { title: 'Settings',  sub: 'Configure your instance',     section: 'System' },
+  '/settings/team/':  { title: 'Team',      sub: 'Invites, roles, and access',   section: 'System' },
 }
 
 export default function Topbar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) {

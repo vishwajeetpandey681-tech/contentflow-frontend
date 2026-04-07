@@ -1,8 +1,20 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, RefreshCw, CheckCheck, Calendar, Filter } from 'lucide-react'
+import { Search, RefreshCw, CheckCheck, Calendar, Filter, Flame } from 'lucide-react'
+import { useInbox } from '@/hooks/useInbox'
+import { useStats } from '@/hooks/useStats'
+import { useSources } from '@/hooks/useSources'
+import type { InboxListParams } from '@/lib/api'
+import { useContentWorkspace } from '@/lib/content-workspace'
+import { InboxStats } from '@/components/scraper/InboxStats'
+import { ArticleCard } from '@/components/scraper/ArticleCard'
+import { ArticleCardSkeleton } from '@/components/scraper/ArticleCardSkeleton'
+import { Spinner } from '@/components/ui/Spinner'
+import toast from 'react-hot-toast'
+import type { ArticleStatus } from '@/types/article'
+import { ARTICLE_CATEGORIES } from '@/types/source'
 
 function toYMD(d: Date) {
   return d.toISOString().slice(0, 10)
@@ -22,17 +34,6 @@ const DATE_PRESETS = [
   { id: '7d', label: 'Last 7 days' },
   { id: '30d', label: 'Last 30 days' },
 ] as const
-import { useInbox } from '@/hooks/useInbox'
-import { useStats } from '@/hooks/useStats'
-import { useSources } from '@/hooks/useSources'
-import { inboxApi, rewriteApi } from '@/lib/api'
-import { InboxStats } from '@/components/scraper/InboxStats'
-import { ArticleCard } from '@/components/scraper/ArticleCard'
-import { ArticleCardSkeleton } from '@/components/scraper/ArticleCardSkeleton'
-import { Spinner } from '@/components/ui/Spinner'
-import toast from 'react-hot-toast'
-import type { ArticleStatus } from '@/types/article'
-import { ARTICLE_CATEGORIES } from '@/types/source'
 
 const TAB_STATUSES: (ArticleStatus | 'published')[] = ['PENDING_REVIEW', 'APPROVED', 'published', 'REJECTED', 'FETCH_FAILED']
 
@@ -44,6 +45,21 @@ const TAB_LABELS: Record<ArticleStatus | 'published', string> = {
   FETCH_FAILED: 'Failed',
   EXTRACTION_FAILED: 'Failed',
   EXPORTED: 'Exported',
+}
+
+const LS_PREFIX = 'contentflow'
+
+function readPendingViewFromStorage(): 'all' | 'trending' {
+  if (typeof window === 'undefined') return 'all'
+  try {
+    const v = localStorage.getItem(`${LS_PREFIX}-inbox-pending-view`)
+    if (v === 'all' || v === 'trending') return v
+    const myOnly = localStorage.getItem(`${LS_PREFIX}-inbox-my-sources-only`)
+    const mySourcesOn = myOnly === null || myOnly === '1'
+    return mySourcesOn ? 'trending' : 'all'
+  } catch {
+    return 'all'
+  }
 }
 
 function InboxTabContent({
@@ -60,6 +76,7 @@ function InboxTabContent({
   onRefresh,
   onApprove,
   onReject,
+  onRestore,
   refreshStats,
   onRetryRewrite,
   onUpdatePost,
@@ -71,6 +88,9 @@ function InboxTabContent({
   onSelectAll,
   onMarkRead,
   onMarkStar,
+  onRewriteWithTrend,
+  wordpressEnabled,
+  pendingTrendingOnly = false,
 }: {
   status: ArticleStatus | 'published'
   search: string
@@ -85,6 +105,7 @@ function InboxTabContent({
   onRefresh: () => void
   onApprove: (id: string) => void
   onReject: (id: string, reason?: string) => void
+  onRestore?: (id: string) => void
   refreshStats: () => void
   onRetryRewrite?: (id: string) => void
   onUpdatePost?: (id: string) => void
@@ -96,6 +117,9 @@ function InboxTabContent({
   onSelectAll?: (checked: boolean) => void
   onMarkRead?: (id: string, read: boolean) => void
   onMarkStar?: (id: string, starred: boolean) => void
+  onRewriteWithTrend?: (id: string, trendKeyword: string, trendTraffic: string) => void
+  wordpressEnabled: boolean
+  pendingTrendingOnly?: boolean
 }) {
   const [loadingHint, setLoadingHint] = useState(false)
   const showActions = status === 'PENDING_REVIEW'
@@ -126,8 +150,10 @@ function InboxTabContent({
   const emptySubs: Record<string, string> = {
     PENDING_REVIEW: 'Add a source and click Scrape Now to fetch articles',
     APPROVED: 'Articles will appear here after you process them from the Pending tab',
-    published: 'Articles published to WordPress will appear here',
-    REJECTED: 'Articles will appear here after you process them from the Pending tab',
+    published: wordpressEnabled
+      ? 'Articles published to WordPress will appear here'
+      : 'Articles live on the news site appear here',
+    REJECTED: 'Restore any item to Pending to review it again',
     FETCH_FAILED: 'Articles will appear here after you process them from the Pending tab',
   }
 
@@ -218,10 +244,14 @@ function InboxTabContent({
         >
           <div style={{ fontSize: 40, opacity: 0.25 }}>{emptyIcons[status] || '📰'}</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>
-            {emptyTitles[status]}
+            {status === 'PENDING_REVIEW' && pendingTrendingOnly
+              ? 'No trending articles right now'
+              : emptyTitles[status]}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'center', maxWidth: 260, lineHeight: 1.5 }}>
-            {emptySubs[status]}
+            {status === 'PENDING_REVIEW' && pendingTrendingOnly
+              ? 'Switch to “All pending” above, or connect Trends to your sources under Sources → Trends.'
+              : emptySubs[status]}
           </div>
         </div>
       ) : (
@@ -281,13 +311,40 @@ function InboxTabContent({
               </button>
             )}
           </div>
+          {status === 'PENDING_REVIEW' && articles.some(a => a.isTrending) && !pendingTrendingOnly && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: '12px 0',
+                borderBottom: '1px solid var(--border)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 12,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#f97316',
+                }}
+              >
+                <Flame size={16} />
+                TRENDING NOW
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-          {articles.map((article) => (
+          {[...articles]
+            .sort((a, b) => (b.isTrending ? 1 : 0) - (a.isTrending ? 1 : 0))
+            .map((article) => (
             <ArticleCard
               key={article.id}
               article={article}
               onApprove={() => onApprove(article.id)}
               onReject={reason => onReject(article.id, reason)}
+              onRestore={onRestore ? () => onRestore(article.id) : undefined}
               onRefresh={onRefresh}
               onRefreshStats={refreshStats}
               onRetryRewrite={onRetryRewrite}
@@ -296,6 +353,7 @@ function InboxTabContent({
               onUnpublish={onUnpublish}
               onMarkRead={onMarkRead}
               onMarkStar={onMarkStar}
+              onRewriteWithTrend={onRewriteWithTrend}
               showActions={showActions}
               showPublishedActions={showPublishedActions}
               selected={selectedIds?.has(article.id)}
@@ -334,6 +392,10 @@ function InboxTabContent({
 
 export default function InboxPage() {
   const router = useRouter()
+  const { apis, routePrefix, mode, wordpressEnabled } = useContentWorkspace()
+  const listInbox = useCallback((p: InboxListParams) => apis.inbox.list(p), [apis.inbox])
+  const statsFetcher = useCallback(() => apis.inbox.stats().then(r => r.data), [apis.inbox])
+  const sourcesListFn = useCallback(() => apis.sources.list().then(r => r.data?.data || r.data || []), [apis.sources])
   const [activeTab, setActiveTab] = useState<ArticleStatus | 'published'>('PENDING_REVIEW')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -352,9 +414,21 @@ export default function InboxPage() {
   const [batchStatus, setBatchStatus] = useState<{ total: number; pending: number; running: number; done: number; failed: number } | null>(null)
   const batchPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const [pendingView, setPendingView] = useState<'all' | 'trending'>('all')
+  useEffect(() => {
+    setPendingView(readPendingViewFromStorage())
+  }, [])
+
+  const setPendingViewPersisted = (v: 'all' | 'trending') => {
+    setPendingView(v)
+    try {
+      localStorage.setItem(`${LS_PREFIX}-inbox-pending-view`, v)
+    } catch { /* ignore */ }
+  }
+
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [activeTab])
+  }, [activeTab, pendingView])
   const [activeSourcesOnly, setActiveSourcesOnly] = useState(() => {
     if (typeof window === 'undefined') return true
     try {
@@ -391,9 +465,17 @@ export default function InboxPage() {
     }
   }
 
-  const { stats = { pending: 0, approved: 0, rejected: 0, failed: 0, published: 0 }, refresh: refreshStats } = useStats()
-  const { sources } = useSources()
+  const { stats = { pending: 0, approved: 0, rejected: 0, failed: 0, published: 0 }, refresh: refreshStats } = useStats({
+    swrKey: `${mode}-inbox-stats`,
+    stats: statsFetcher,
+  })
+  const { sources } = useSources({
+    swrKey: `${mode}-sources`,
+    listFn: sourcesListFn,
+  })
   const isPublishedTab = activeTab === 'published'
+  const trendingOnlyPending =
+    !isPublishedTab && activeTab === 'PENDING_REVIEW' && pendingView === 'trending'
   const { articles, total, loading, loadingMore, error, hasMore, loadMore, refresh } = useInbox(
     isPublishedTab ? 'APPROVED' : activeTab,
     debouncedSearch,
@@ -405,32 +487,34 @@ export default function InboxPage() {
     activeSourcesOnly,
     sourceIdFilter,
     isReadFilter,
-    isStarredFilter
+    isStarredFilter,
+    trendingOnlyPending,
+    { list: listInbox, keyPrefix: mode }
   )
 
   const handleApprove = async (id: string) => {
     try {
-      await inboxApi.approve(id)
+      await apis.inbox.approve(id)
       toast.success('Approved — choose language & start rewrite on next page')
       refresh()
       refreshStats()
-      router.push(`/scraper/inbox/${id}/rewrite/`)
+      router.push(`${routePrefix.inbox}/${id}/rewrite/`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Approve failed')
     }
   }
 
   const handleRetryRewrite = async (id: string) => {
-    router.push(`/scraper/inbox/${id}/rewrite/`)
+    router.push(`${routePrefix.inbox}/${id}/rewrite/`)
   }
 
   const handleUpdatePost = (id: string) => {
-    router.push(`/scraper/inbox/${id}/rewrite/`)
+    router.push(`${routePrefix.inbox}/${id}/rewrite/`)
   }
 
   const handleUnlink = async (id: string) => {
     try {
-      await inboxApi.unlinkWpPublish(id)
+      await apis.inbox.unlinkWpPublish(id)
       toast.success('Unlinked from WordPress')
       refresh()
       refreshStats()
@@ -442,8 +526,7 @@ export default function InboxPage() {
   const handleUnpublish = async (id: string) => {
     if (!confirm('Unpublish this post from WordPress? It will be moved to Trash on your WordPress site.')) return
     try {
-      const { publishApi } = await import('@/lib/api')
-      await publishApi.unpublish(id)
+      await apis.publish.unpublish(id)
       toast.success('Post unpublished from WordPress')
       refresh()
       refreshStats()
@@ -454,12 +537,23 @@ export default function InboxPage() {
 
   const handleReject = async (id: string, reason?: string) => {
     try {
-      await inboxApi.reject(id, reason)
+      await apis.inbox.reject(id, reason)
       toast.success('Article rejected')
       refresh()
       refreshStats()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Reject failed')
+    }
+  }
+
+  const handleRestore = async (id: string) => {
+    try {
+      await apis.inbox.restore(id)
+      toast.success('Restored to Pending')
+      refresh()
+      refreshStats()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Restore failed')
     }
   }
 
@@ -471,7 +565,7 @@ export default function InboxPage() {
     }
     setApproveSelectedLoading(true)
     try {
-      await Promise.all(ids.map(id => inboxApi.approve(id)))
+      await Promise.all(ids.map(id => apis.inbox.approve(id)))
       toast.success(`Approved ${ids.length} article${ids.length === 1 ? '' : 's'}`)
       setSelectedIds(new Set())
       refresh()
@@ -499,15 +593,31 @@ export default function InboxPage() {
 
   const handleMarkRead = async (id: string, read: boolean) => {
     try {
-      await inboxApi.markRead(id, read)
+      await apis.inbox.markRead(id, read)
       refresh()
     } catch { /* ignore */ }
   }
   const handleMarkStar = async (id: string, starred: boolean) => {
     try {
-      await inboxApi.markStar(id, starred)
+      await apis.inbox.markStar(id, starred)
       refresh()
     } catch { /* ignore */ }
+  }
+
+  const handleRewriteWithTrend = async (id: string, trendKeyword: string, trendTraffic: string) => {
+    if (activeTab === 'PENDING_REVIEW') {
+      try {
+        await apis.inbox.approve(id)
+        toast.success('Approved — optimizing for trend keyword')
+        refresh()
+        refreshStats()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Approve failed')
+        return
+      }
+    }
+    const params = new URLSearchParams({ trendKeyword, trendTraffic })
+    router.push(`${routePrefix.inbox}/${id}/rewrite/?${params.toString()}`)
   }
 
   const handleBulk = async (action: 'delete' | 'rewrite' | 'markRead' | 'markUnread' | 'star' | 'unstar') => {
@@ -515,7 +625,7 @@ export default function InboxPage() {
     if (ids.length === 0) return
     if (action === 'rewrite') {
       try {
-        await rewriteApi.batch.queue(ids)
+        await apis.rewrite.batch.queue(ids)
         setSelectedIds(new Set())
         setBatchStatus({ total: ids.length, pending: ids.length, running: 0, done: 0, failed: 0 })
         toast.success(`Queued ${ids.length} article(s) for rewrite`)
@@ -526,7 +636,7 @@ export default function InboxPage() {
     }
     setBulkLoading(true)
     try {
-      const res = await inboxApi.bulk(action, ids)
+      const res = await apis.inbox.bulk(action, ids)
       const d = res.data?.data
       const processed = (d as { processed?: number })?.processed ?? 0
       const errors = (d as { errors?: { id: string; error: string }[] })?.errors ?? []
@@ -545,7 +655,7 @@ export default function InboxPage() {
   useEffect(() => {
     if (!batchStatus || (batchStatus.pending === 0 && batchStatus.running === 0)) return
     const poll = () => {
-      rewriteApi.batch.status().then((d) => {
+      apis.rewrite.batch.status().then((d) => {
         setBatchStatus({ total: d.total, pending: d.pending, running: d.running, done: d.done, failed: d.failed })
         if (d.running === 0 && d.pending === 0) {
           if (batchPollRef.current) clearInterval(batchPollRef.current)
@@ -560,7 +670,8 @@ export default function InboxPage() {
     batchPollRef.current = setInterval(poll, 2000)
     poll()
     return () => { if (batchPollRef.current) clearInterval(batchPollRef.current) }
-  }, [batchStatus?.pending, batchStatus?.running])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- omit full batchStatus to avoid resetting interval every poll tick; pending/running + APIs suffice
+  }, [batchStatus?.pending, batchStatus?.running, apis.rewrite.batch, refresh, refreshStats])
 
   const handleSearch = (v: string) => {
     setSearch(v)
@@ -585,7 +696,7 @@ export default function InboxPage() {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden" style={{ background: 'var(--bg)' }}>
-      <InboxStats stats={stats} />
+      <InboxStats stats={stats} publishedSub={wordpressEnabled ? 'On WordPress' : 'On news site'} />
 
       {/* Tabs bar - overflow-x scroll, no wrap */}
       <div className="flex shrink-0 border-b" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
@@ -676,6 +787,57 @@ export default function InboxPage() {
           )}
         </div>
       </div>
+
+      {activeTab === 'PENDING_REVIEW' && (
+        <div
+          className="flex shrink-0 items-center gap-2 border-b px-3 py-2 md:px-4"
+          style={{ borderColor: 'var(--border)', background: 'var(--card)' }}
+        >
+          <span style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Pending
+          </span>
+          <div
+            className="inline-flex overflow-hidden rounded-lg"
+            style={{ border: '1px solid var(--border)' }}
+          >
+            <button
+              type="button"
+              onClick={() => setPendingViewPersisted('all')}
+              style={{
+                padding: '6px 12px',
+                fontSize: 11,
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer',
+                background: pendingView === 'all' ? 'var(--accent-glow)' : 'transparent',
+                color: pendingView === 'all' ? 'var(--accent-light)' : 'var(--text-muted)',
+              }}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingViewPersisted('trending')}
+              style={{
+                padding: '6px 12px',
+                fontSize: 11,
+                fontWeight: 600,
+                border: 'none',
+                borderLeft: '1px solid var(--border)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                background: pendingView === 'trending' ? 'rgba(249,115,22,0.12)' : 'transparent',
+                color: pendingView === 'trending' ? '#f97316' : 'var(--text-muted)',
+              }}
+            >
+              <Flame size={14} />
+              Trending now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar — mobile: search row + Approve All row; desktop: single row */}
       <div
@@ -929,17 +1091,21 @@ export default function InboxPage() {
             onRefresh={refresh}
             onApprove={handleApprove}
             onReject={handleReject}
+            onRestore={tab === 'REJECTED' ? handleRestore : undefined}
             refreshStats={refreshStats}
             onRetryRewrite={handleRetryRewrite}
-            onUpdatePost={handleUpdatePost}
-            onUnlink={handleUnlink}
-            onUnpublish={handleUnpublish}
-            showPublishedActions={tab === 'published'}
+            onUpdatePost={wordpressEnabled ? handleUpdatePost : undefined}
+            onUnlink={wordpressEnabled ? handleUnlink : undefined}
+            onUnpublish={wordpressEnabled ? handleUnpublish : undefined}
+            showPublishedActions={tab === 'published' && wordpressEnabled}
             selectedIds={activeTab === 'PENDING_REVIEW' ? selectedIds : undefined}
             onToggleSelect={activeTab === 'PENDING_REVIEW' ? handleToggleSelect : undefined}
             onSelectAll={activeTab === 'PENDING_REVIEW' ? handleSelectAll : undefined}
             onMarkRead={handleMarkRead}
             onMarkStar={handleMarkStar}
+            onRewriteWithTrend={handleRewriteWithTrend}
+            wordpressEnabled={wordpressEnabled}
+            pendingTrendingOnly={tab === 'PENDING_REVIEW' && pendingView === 'trending'}
           />
         )
       ))}

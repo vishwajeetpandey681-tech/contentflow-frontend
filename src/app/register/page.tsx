@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { UserPlus } from 'lucide-react'
-import { authApi, authApiInvite } from '@/lib/api'
+import { authApi, authApiInvite, parseAuthSuccessPayload } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
 import toast from 'react-hot-toast'
 
@@ -56,9 +56,10 @@ function RegisterForm() {
         email: email.trim(),
         password,
         name: name.trim() || undefined,
-        inviteToken: inviteToken || undefined,
+        // Only send invite when validated — invalid token in URL caused 400 on open registration
+        ...(inviteValid === true && inviteToken ? { inviteToken } : {}),
       })
-      const { token, user } = res.data.data
+      const { token, user } = parseAuthSuccessPayload(res)
       setAuth(token, user)
       toast.success('Account created!')
       router.push('/scraper/inbox/')
@@ -220,7 +221,7 @@ function RegisterForm() {
           </div>
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (!!inviteToken && inviteValid === null)}
             style={{
               width: '100%',
               padding: '12px 16px',

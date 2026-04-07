@@ -8,6 +8,19 @@ export type ArticleStatus =
 
 export type RewriteStatus = 'IDLE' | 'RUNNING' | 'DONE' | 'FAILED'
 
+export interface TokenUsageSnapshot {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+export interface ProviderUsageTotals {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  requests: number
+}
+
 export interface RewritePass {
   id: 'full' | 'shortnews' | 'char120' | 'char65' | 'keywords' | 'social_caption' | 'push_notification'
   label: string
@@ -17,6 +30,10 @@ export interface RewritePass {
   status: RewriteStatus
   output: string
   originalOutput: string
+  /** Last provider used for this pass: local Ollama vs OpenAI (ChatGPT). */
+  aiProvider?: 'ollama' | 'openai'
+  aiModel?: string
+  tokenUsage?: TokenUsageSnapshot | null
 }
 
 export interface RewriteQuality {
@@ -40,6 +57,15 @@ export interface ArticleRewrite {
   customInstruction?: string | null
   targetWordCount?: number | null
   quality?: RewriteQuality | null
+  /** Aggregated token use for this rewrite session (multi-pass + re-runs). */
+  usageTotals?: {
+    ollama: ProviderUsageTotals
+    openai: ProviderUsageTotals
+  } | null
+  /** Settings snapshot: ollama_first vs openai_only */
+  rewriteProviderSetting?: 'ollama_first' | 'openai_only'
+  ollamaModelLabel?: string
+  openaiModelLabel?: string
 }
 
 export interface RewriteVersion {
@@ -76,7 +102,7 @@ export interface ScraperArticle {
   wpPostId?:     number | null
   wpPostUrl?:    string | null
   wpPublishes?:  Record<string, number>
-  wpPublishHistory?: import('@/lib/api').WpPublishHistoryEntry[]
+  wpPublishHistory?: WpPublishHistoryEntry[]
   assignedTo?:   string | null
   assignedToName?: string | null
   assignedAt?:   string | null
@@ -86,6 +112,43 @@ export interface ScraperArticle {
   lockExpiresAt?: string | null
   isRead?:      boolean
   isStarred?:   boolean
+  approvalStatus?: 'pending' | 'auto_approved' | 'human_approved' | 'rejected' | 'published'
+  approvalScore?: number
+  approvalReasons?: string[]
+  approvedBy?: string | null
+  approvedAt?: string | null
+  rejectedReason?: string | null
+  sourceName?: string
+  publishedToWebsite?: boolean
+  websiteArticleId?: string | null
+  websiteSlug?: string | null
+  /** Single-shot inbox rewrite: which AI + token usage (optional). */
+  quickRewriteMeta?: {
+    provider: 'ollama' | 'openai'
+    model: string
+    usage: TokenUsageSnapshot | null
+    at: string
+  } | null
+  isTrending?: boolean
+  trendKeyword?: string | null
+  trendTraffic?: string | null
+  trendRelated?: string[] | null
+}
+
+export type InboxArticle = ScraperArticle
+
+export interface WpPublishHistoryEntry {
+  id: string
+  siteId: string
+  siteLabel: string
+  siteUrl?: string
+  attemptedAt: string
+  publishedAt?: string
+  status: 'published' | 'draft' | 'scheduled' | 'failed' | 'unpublished' | 'pending'
+  postId?: number | null
+  postUrl?: string | null
+  title?: string
+  error?: string | null
 }
 
 export interface InboxStats {

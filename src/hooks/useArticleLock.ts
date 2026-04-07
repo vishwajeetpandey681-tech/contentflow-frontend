@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { inboxApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
+import { useContentWorkspace } from '@/lib/content-workspace'
 
 const HEARTBEAT_INTERVAL_MS = 60_000
 
@@ -16,12 +16,13 @@ export interface ArticleLockState {
 }
 
 export function useArticleLock(articleId: string | null): ArticleLockState {
+  const { apis } = useContentWorkspace()
   const [isLocked, setIsLocked] = useState(false)
   const [lockedByMe, setLockedByMe] = useState(false)
   const [lockedByName, setLockedByName] = useState<string | null>(null)
   const [lockExpiresAt, setLockExpiresAt] = useState<string | null>(null)
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const userId = useAuthStore(s => s.user?.id)
+  const userId = useAuthStore(s => s.user?.id ?? s.cmsUser?.id)
 
   const clearHeartbeat = useCallback(() => {
     if (heartbeatRef.current) {
@@ -33,7 +34,7 @@ export function useArticleLock(articleId: string | null): ArticleLockState {
   const releaseLock = useCallback(async () => {
     if (!articleId) return
     try {
-      await inboxApi.unlock(articleId)
+      await apis.inbox.unlock(articleId)
     } catch {
       // ignore errors on release (e.g. already unlocked)
     } finally {
@@ -43,7 +44,7 @@ export function useArticleLock(articleId: string | null): ArticleLockState {
       setLockExpiresAt(null)
       clearHeartbeat()
     }
-  }, [articleId, clearHeartbeat])
+  }, [articleId, clearHeartbeat, apis.inbox])
 
   const acquireLock = useCallback(
     async (takeOver = false): Promise<
@@ -52,7 +53,7 @@ export function useArticleLock(articleId: string | null): ArticleLockState {
     > => {
       if (!articleId || !userId) return { ok: false, lockedBy: '', lockedByName: 'Unknown', expiresAt: null }
       try {
-        const res = await inboxApi.lock(articleId, takeOver)
+        const res = await apis.inbox.lock(articleId, takeOver)
         const data = res.data as { locked?: boolean; lockedBy?: string; lockedByName?: string; lockExpiresAt?: string }
         if (data.locked) {
           setIsLocked(true)
@@ -63,7 +64,7 @@ export function useArticleLock(articleId: string | null): ArticleLockState {
           heartbeatRef.current = setInterval(async () => {
             if (!articleId) return
             try {
-              const h = await inboxApi.heartbeat(articleId)
+              const h = await apis.inbox.heartbeat(articleId)
               const d = h.data as { lockExpiresAt?: string }
               setLockExpiresAt(d.lockExpiresAt ?? null)
             } catch {
@@ -92,7 +93,7 @@ export function useArticleLock(articleId: string | null): ArticleLockState {
         throw err
       }
     },
-    [articleId, userId, clearHeartbeat]
+    [articleId, userId, clearHeartbeat, apis.inbox]
   )
 
   useEffect(() => {

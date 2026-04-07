@@ -4,7 +4,8 @@ import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { LogIn } from 'lucide-react'
-import { authApi } from '@/lib/api'
+import { authLoginStudioCompat, parseAuthSuccessPayload } from '@/lib/api'
+import { ensureTrailingSlashForInternalNav } from '@/lib/pathname'
 import { useAuthStore } from '@/lib/auth-store'
 import toast from 'react-hot-toast'
 
@@ -19,7 +20,7 @@ function LoginForm() {
   const token = useAuthStore(s => s.token)
 
   useEffect(() => {
-    if (token) router.replace(next)
+    if (token) router.replace(ensureTrailingSlashForInternalNav(next))
   }, [token, router, next])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,11 +31,12 @@ function LoginForm() {
     }
     setLoading(true)
     try {
-      const res = await authApi.login({ email: email.trim(), password })
-      const { token, user } = res.data.data
+      const res = await authLoginStudioCompat({ email: email.trim(), password })
+      const { token, user, redirect } = parseAuthSuccessPayload(res)
       setAuth(token, user)
       toast.success('Welcome back!')
-      router.push(next)
+      const dest = ensureTrailingSlashForInternalNav(redirect || next)
+      router.push(dest)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Login failed')
     } finally {
@@ -186,7 +188,13 @@ function LoginForm() {
           </button>
         </form>
 
-        <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+        <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+          Publisher or writer?{' '}
+          <Link href="/cms/login/" style={{ color: 'var(--accent-light)', fontWeight: 600, textDecoration: 'none' }}>
+            Sign in to CMS →
+          </Link>
+        </p>
+        <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
           Don&apos;t have an account?{' '}
           <Link href="/register/" style={{ color: 'var(--accent-light)', fontWeight: 500, textDecoration: 'none' }}>
             Register

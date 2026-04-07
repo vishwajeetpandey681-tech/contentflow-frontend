@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, RotateCw, Send, Loader2, LogOut, ChevronDown, Settings2, Zap, Globe, Clock } from 'lucide-react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { ArrowLeft, RotateCw, Send, Loader2, LogOut, ChevronDown, Settings2, Zap, Globe, Clock, Copy, Download } from 'lucide-react'
 import useSWR from 'swr'
-import { inboxApi, sourcesApi, rewriteApi } from '@/lib/api'
+import { useContentWorkspace } from '@/lib/content-workspace'
+import { DEFAULT_WEBSITE_DOMAIN, getArticleUrl } from '@/lib/config'
+import { resolveFeaturedImageUrl } from '@/lib/featured-image'
 import { useRewrite } from '@/hooks/useRewrite'
 import { useArticleLock } from '@/hooks/useArticleLock'
 import { useAuthStore } from '@/lib/auth-store'
@@ -20,11 +22,12 @@ import { PublishHistory } from '@/components/scraper/PublishHistory'
 import toast from 'react-hot-toast'
 import type { ScraperArticle } from '@/types/article'
 
-const fetcher = (id: string) => inboxApi.get(id).then(r => r.data?.data as ScraperArticle)
-
 export default function RewritePage() {
+  const { apis, routePrefix, mode, wordpressEnabled } = useContentWorkspace()
+  const inboxListPath = `${routePrefix.inbox}/`
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const articleId = params?.id as string
   const [selectedPassIds, setSelectedPassIds] = useState<Set<string>>(new Set())
   const [lockModalOpen, setLockModalOpen] = useState(false)
@@ -35,14 +38,18 @@ export default function RewritePage() {
   } | null>(null)
   const [takeOverLoading, setTakeOverLoading] = useState(false)
   const hasAttemptedLock = useRef(false)
+  const hasRefetchedForApproval = useRef(false)
 
-  const { data: article, error: articleError, isLoading: articleLoading, mutate: mutateArticle } = useSWR(articleId ? `article-${articleId}` : null, () => fetcher(articleId))
+  const { data: article, error: articleError, isLoading: articleLoading, mutate: mutateArticle } = useSWR(
+    articleId ? `${mode}-article-${articleId}` : null,
+    () => apis.inbox.get(articleId).then(r => r.data?.data as ScraperArticle)
+  )
   const {
     lockedByMe,
     acquireLock,
     releaseLock,
   } = useArticleLock(articleId)
-  const isAdmin = useAuthStore(s => s.user?.isAdmin)
+  const isAdmin = useAuthStore(s => !!(s.user?.isAdmin || s.cmsUser?.isAdmin))
   const {
     rewrite,
     isLoading: rewriteLoading,
@@ -80,6 +87,11 @@ export default function RewritePage() {
   const [versionSaveLoading, setVersionSaveLoading] = useState(false)
   const [publishSheetOpen, setPublishSheetOpen] = useState(false)
   const [publishHistoryRefreshKey, setPublishHistoryRefreshKey] = useState(0)
+  const [websitePublishModalOpen, setWebsitePublishModalOpen] = useState(false)
+  const [websitePublishLoading, setWebsitePublishLoading] = useState(false)
+  const [websiteFetchImageLoading, setWebsiteFetchImageLoading] = useState(false)
+  const [websitePublishResult, setWebsitePublishResult] = useState<{ slug: string } | null>(null)
+  const [websiteOverrides, setWebsiteOverrides] = useState({ seoTitle: '', seoDescription: '', category: '', featuredImage: '', language: 'english' })
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(true)
   const [headlineSuggestions, setHeadlineSuggestions] = useState<string[]>([])
   const [headlineLoading, setHeadlineLoading] = useState(false)
@@ -95,7 +107,7 @@ export default function RewritePage() {
   const [customInstruction, setCustomInstruction] = useState<string>('')
   const [targetWordCount, setTargetWordCount] = useState<number>(580)
 
-  const { data: sources } = useSWR('sources', () => sourcesApi.list().then(r => r.data?.data || []))
+  const { data: sources } = useSWR(`${mode}-rewrite-sources`, () => apis.sources.list().then(r => r.data?.data || []))
   const sourceCustomPrompt = article?.sourceId
     ? (sources || []).find((s: { id: string; customPrompt?: string }) => s.id === article.sourceId)?.customPrompt
     : undefined
@@ -115,14 +127,31 @@ export default function RewritePage() {
   useEffect(() => {
     if (rewrite?.tone !== undefined) setTone(rewrite.tone || '')
     if (rewrite?.targetAudience !== undefined) setTargetAudience(rewrite.targetAudience || '')
-    if (rewrite?.customInstruction !== undefined) setCustomInstruction(rewrite.customInstruction || '')
+    const trendKeyword = searchParams.get('trendKeyword')
+    const trendTraffic = searchParams.get('trendTraffic')
+    if (trendKeyword && trendTraffic) {
+      setCustomInstruction(
+        `Optimize this article for the keyword: ${trendKeyword}. This keyword is trending with ${trendTraffic} searches. Make sure the title and first paragraph prominently feature this keyword.`
+      )
+    } else if (rewrite?.customInstruction !== undefined) {
+      setCustomInstruction(rewrite.customInstruction || '')
+    }
     if (rewrite?.targetWordCount != null) setTargetWordCount(rewrite.targetWordCount)
-  }, [rewrite?.tone, rewrite?.targetAudience, rewrite?.customInstruction, rewrite?.targetWordCount])
+  }, [rewrite?.tone, rewrite?.targetAudience, rewrite?.customInstruction, rewrite?.targetWordCount, searchParams])
 
   useEffect(() => {
     if (!articleId) return
-    rewriteApi.versions.list(articleId).then(setVersions).catch(() => setVersions([]))
-  }, [articleId, rewrite?.passes])
+    apis.rewrite.versions.list(articleId).then(setVersions).catch(() => setVersions([]))
+  }, [articleId, rewrite?.passes, apis.rewrite])
+
+  // Refetch article when rewrite completes to get approval score/reasons from backend
+  useEffect(() => {
+    if (allDone && articleId && !hasRefetchedForApproval.current) {
+      hasRefetchedForApproval.current = true
+      mutateArticle()
+    }
+    if (!allDone) hasRefetchedForApproval.current = false
+  }, [allDone, articleId, mutateArticle])
 
   // Auto-collapse settings accordion based on wizard stage
   useEffect(() => {
@@ -155,10 +184,10 @@ export default function RewritePage() {
   useEffect(() => {
     return () => {
       if (articleId && lockedByMe) {
-        inboxApi.unlock(articleId).catch(() => {})
+        apis.inbox.unlock(articleId).catch(() => {})
       }
     }
-  }, [articleId, lockedByMe])
+  }, [articleId, lockedByMe, apis.inbox])
 
   // Release lock on page close (beforeunload)
   useEffect(() => {
@@ -168,8 +197,11 @@ export default function RewritePage() {
           try {
             const s = localStorage.getItem('contentflow-auth')
             if (!s) return null
-            const p = JSON.parse(s)
-            return p?.state?.token || null
+            const p = JSON.parse(s) as { state?: { token?: string | null; cmsToken?: string | null } }
+            const onCms = window.location.pathname.startsWith('/cms') && !window.location.pathname.startsWith('/cms/login')
+            const st = p?.state
+            if (onCms) return st?.cmsToken || st?.token || null
+            return st?.token || st?.cmsToken || null
           } catch { return null }
         })()
         if (token) {
@@ -190,7 +222,7 @@ export default function RewritePage() {
   const handleGoBack = () => {
     setLockModalOpen(false)
     setLockConflict(null)
-    router.push('/scraper/inbox/')
+    router.push(inboxListPath)
   }
 
   const handleTakeOver = async () => {
@@ -215,7 +247,7 @@ export default function RewritePage() {
 
   const handleReleaseArticle = async () => {
     await releaseLock()
-    router.push('/scraper/inbox/')
+    router.push(inboxListPath)
   }
 
   const rewriteOpts = () => ({
@@ -245,7 +277,7 @@ export default function RewritePage() {
   const handleStartWithFetch = async () => {
     setStartError(null)
     try {
-      await inboxApi.fetchFull(articleId)
+      await apis.inbox.fetchFull(articleId)
       mutate()
       await startRewrite(rewriteOpts())
       toast.success('Fetched full article and started AI rewrite')
@@ -322,7 +354,7 @@ export default function RewritePage() {
     try {
       await publishToWP(opts)
       toast.success(opts.status === 'draft' ? 'Saved as draft ✓' : 'Published to WordPress ✓')
-      router.push('/scraper/inbox/')
+      router.push(inboxListPath)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Publish failed')
     }
@@ -333,11 +365,68 @@ export default function RewritePage() {
     setPublishSheetOpen(true)
   }
 
+  const char65 = passes.find(p => p.id === 'char65')?.output || ''
+  const char120 = passes.find(p => p.id === 'char120')?.output || ''
+  const src = (sources || []).find((s: { id: string }) => s.id === article?.sourceId) as { category?: string } | undefined
+  const defaultCategory = (src?.category || 'general').toLowerCase().replace(/\s+/g, '-')
+
+  const handleOpenWebsitePublish = () => {
+    if (!allDone) { toast.error('Complete all rewrite passes first'); return }
+    setWebsitePublishResult(null)
+    setWebsiteOverrides({
+      seoTitle: char65,
+      seoDescription: char120,
+      category: defaultCategory,
+      featuredImage: article ? resolveFeaturedImageUrl(article, rewrite ?? undefined) : '',
+      language: rewrite?.outputLanguage || outputLanguage || 'english',
+    })
+    setWebsitePublishModalOpen(true)
+  }
+
+  const handleFetchFeaturedImageFromSource = async () => {
+    if (!articleId) return
+    if (!article?.url?.startsWith('http')) {
+      toast.error('Article has no source URL to fetch from')
+      return
+    }
+    setWebsiteFetchImageLoading(true)
+    try {
+      const { image } = await apis.inbox.extractImage(articleId)
+      setWebsiteOverrides(o => ({ ...o, featuredImage: image }))
+      await mutateArticle()
+      toast.success('Image fetched from source page')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not fetch image')
+    } finally {
+      setWebsiteFetchImageLoading(false)
+    }
+  }
+
+  const handlePublishToWebsite = async () => {
+    if (!articleId) return
+    setWebsitePublishLoading(true)
+    try {
+      const { slug } = await apis.website.publish(articleId, {
+        title: websiteOverrides.seoTitle || undefined,
+        category: websiteOverrides.category || undefined,
+        featuredImage: websiteOverrides.featuredImage || undefined,
+        language: websiteOverrides.language || undefined,
+      })
+      setWebsitePublishResult({ slug })
+      mutateArticle()
+      toast.success(`Published to ${DEFAULT_WEBSITE_DOMAIN}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Publish failed')
+    } finally {
+      setWebsitePublishLoading(false)
+    }
+  }
+
   const handleReject = async () => {
     try {
-      await inboxApi.reject(articleId)
+      await apis.inbox.reject(articleId)
       toast.success('Article rejected')
-      router.push('/scraper/inbox/')
+      router.push(inboxListPath)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Reject failed')
     }
@@ -349,7 +438,7 @@ export default function RewritePage() {
     try {
       await publishToWP({ status: 'draft', categoryId: '', authorId: '' })
       toast.success('Published to WordPress ✓')
-      router.push('/scraper/inbox/')
+      router.push(inboxListPath)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Publish failed')
     } finally {
@@ -368,7 +457,7 @@ export default function RewritePage() {
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <button
-            onClick={() => router.push('/scraper/inbox/')}
+            onClick={() => router.push(inboxListPath)}
             style={{ padding: '8px 16px', fontSize: 12, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
           >
             Back to Inbox
@@ -398,7 +487,7 @@ export default function RewritePage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
         <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Article not found</span>
         <button
-          onClick={() => router.push('/scraper/inbox/')}
+          onClick={() => router.push(inboxListPath)}
           style={{ padding: '8px 16px', fontSize: 12, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
         >
           Back to Inbox
@@ -443,7 +532,7 @@ export default function RewritePage() {
         onCustomFooterChange={updateCustomFooter}
         onPublish={handlePublish}
         onReject={handleReject}
-        onBack={() => router.push('/scraper/inbox/')}
+        onBack={() => router.push(inboxListPath)}
         onRerunAll={handleRerunAll}
         onFetchAndRerun={handleStartWithFetch}
         onSwitchToCards={() => setViewMode('cards')}
@@ -471,6 +560,8 @@ export default function RewritePage() {
         publishLoading={topbarPublishLoading}
         runningPassIndex={runningIndex >= 0 ? runningIndex : 0}
         onArticleUpdated={mutateArticle}
+        wordpressEnabled={wordpressEnabled}
+        onWebsitePublishClick={handleOpenWebsitePublish}
       />
       {lockModal}
       </>
@@ -554,13 +645,13 @@ export default function RewritePage() {
       {/* AI Suggestions */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <button type="button"
-          onClick={async () => { setHeadlineLoading(true); setHeadlineSuggestions([]); try { const d = await rewriteApi.suggestHeadlines(articleId); setHeadlineSuggestions(d.headlines || []); if (!d.headlines?.length) toast.error('No suggestions'); } catch { toast.error('Failed to suggest'); } finally { setHeadlineLoading(false); } }}
+          onClick={async () => { setHeadlineLoading(true); setHeadlineSuggestions([]); try { const d = await apis.rewrite.suggestHeadlines(articleId); setHeadlineSuggestions(d.headlines || []); if (!d.headlines?.length) toast.error('No suggestions'); } catch { toast.error('Failed to suggest'); } finally { setHeadlineLoading(false); } }}
           disabled={headlineLoading}
           style={{ padding: '8px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(108,99,255,0.08)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 8, cursor: headlineLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <Zap size={12} />{headlineLoading ? '…' : 'Suggest Headlines'}
         </button>
         <button type="button"
-          onClick={async () => { setKeywordLoading(true); setKeywordSuggestions([]); try { const d = await rewriteApi.suggestKeywords(articleId); setKeywordSuggestions(d.keywords || []); if (!d.keywords?.length) toast.error('No keywords'); } catch { toast.error('Failed'); } finally { setKeywordLoading(false); } }}
+          onClick={async () => { setKeywordLoading(true); setKeywordSuggestions([]); try { const d = await apis.rewrite.suggestKeywords(articleId); setKeywordSuggestions(d.keywords || []); if (!d.keywords?.length) toast.error('No keywords'); } catch { toast.error('Failed'); } finally { setKeywordLoading(false); } }}
           disabled={keywordLoading}
           style={{ padding: '8px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(0,212,255,0.06)', color: 'var(--cyan)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 8, cursor: keywordLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <Zap size={12} />{keywordLoading ? '…' : 'NLP Keywords'}
@@ -592,7 +683,7 @@ export default function RewritePage() {
         background: 'var(--surface)',
         flexShrink: 0,
       }}>
-        <button onClick={() => router.push('/scraper/inbox/')}
+        <button onClick={() => router.push(inboxListPath)}
           style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer', padding: '4px 0', flexShrink: 0 }}>
           <ArrowLeft size={15} /> Inbox
         </button>
@@ -654,13 +745,23 @@ export default function RewritePage() {
               </button>
             </>
           )}
-          {/* Stage 3 only: Release button — glowing green */}
+          {/* Stage 3 only: Publish to Website + Release buttons */}
           {stage === 'done' && (
-            <button onClick={handleOpenPublishSheet}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', boxShadow: '0 2px 16px rgba(0,229,160,0.45)', animation: 'pulse-green 2s infinite' }}>
-              <Send size={13} />
-              {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
-            </button>
+            <>
+              <button onClick={handleOpenWebsitePublish} disabled={!!article.publishedToWebsite}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, background: article.publishedToWebsite ? 'var(--card)' : 'rgba(33,150,243,0.15)', color: article.publishedToWebsite ? 'var(--text-dim)' : '#1976d2', border: '1px solid var(--border)', borderRadius: 8, cursor: article.publishedToWebsite ? 'not-allowed' : 'pointer' }}
+                title={article.publishedToWebsite ? 'Already on website' : `Publish to ${DEFAULT_WEBSITE_DOMAIN}`}>
+                <Globe size={13} />
+                {article.publishedToWebsite ? '🌐 On Website' : '🌐 Publish to Website'}
+              </button>
+              {wordpressEnabled && (
+              <button onClick={handleOpenPublishSheet}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', boxShadow: '0 2px 16px rgba(0,229,160,0.45)', animation: 'pulse-green 2s infinite' }}>
+                <Send size={13} />
+                {article.wpPostId ? '🌐 Update Post' : '📤 Release to WordPress'}
+              </button>
+              )}
+            </>
           )}
         </div>
       </header>
@@ -671,7 +772,7 @@ export default function RewritePage() {
         borderBottom: '1px solid var(--border)', background: 'var(--surface)',
         flexShrink: 0, position: 'sticky', top: 0, zIndex: 30,
       }}>
-        <button onClick={() => router.push('/scraper/inbox/')}
+        <button onClick={() => router.push(inboxListPath)}
           style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', color: 'var(--text-muted)', padding: '6px', cursor: 'pointer', borderRadius: 8 }}>
           <ArrowLeft size={20} />
         </button>
@@ -697,10 +798,20 @@ export default function RewritePage() {
         )}
         {/* Only show in header on mobile when done */}
         {stage === 'done' && (
-          <button onClick={handleOpenPublishSheet}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', fontSize: 12, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,229,160,0.4)' }}>
-            <Send size={12} />{article.wpPostId ? 'Update' : 'Release'}
-          </button>
+          <>
+            {!article.publishedToWebsite && (
+              <button onClick={handleOpenWebsitePublish}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(33,150,243,0.15)', color: '#1976d2', border: '1px solid rgba(33,150,243,0.3)', borderRadius: 6, cursor: 'pointer' }}>
+                <Globe size={11} /> Website
+              </button>
+            )}
+            {wordpressEnabled && (
+            <button onClick={handleOpenPublishSheet}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', fontSize: 12, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,229,160,0.4)' }}>
+              <Send size={12} />{article.wpPostId ? 'Update' : 'Release'}
+            </button>
+            )}
+          </>
         )}
       </header>
 
@@ -752,14 +863,18 @@ export default function RewritePage() {
               Rewrite complete — {totalPasses} passes done
             </span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>
-              Review the content below, then hit Release to publish.
+              {wordpressEnabled
+                ? 'Review the content below, then hit Release to publish.'
+                : 'Review the content below, then publish to the news site.'}
             </span>
           </div>
+          {wordpressEnabled && (
           <button onClick={handleOpenPublishSheet}
             className="hidden lg:flex"
             style={{ alignItems: 'center', gap: 6, padding: '8px 20px', fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,229,160,0.4)' }}>
             <Send size={13} /> {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
           </button>
+          )}
         </div>
       )}
 
@@ -865,7 +980,7 @@ export default function RewritePage() {
                   placeholder="Label (e.g. Draft 1)"
                   style={{ flex: 1, padding: '6px 10px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
                 <button type="button"
-                  onClick={async () => { setVersionSaveLoading(true); try { await rewriteApi.versions.save(articleId, versionLabel || undefined); setVersions(await rewriteApi.versions.list(articleId)); setVersionLabel(''); mutate(); toast.success('Version saved'); } catch { toast.error('Failed to save'); } finally { setVersionSaveLoading(false); } }}
+                  onClick={async () => { setVersionSaveLoading(true); try { await apis.rewrite.versions.save(articleId, versionLabel || undefined); setVersions(await apis.rewrite.versions.list(articleId)); setVersionLabel(''); mutate(); toast.success('Version saved'); } catch { toast.error('Failed to save'); } finally { setVersionSaveLoading(false); } }}
                   disabled={versionSaveLoading}
                   style={{ padding: '6px 10px', fontSize: 11, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 6, cursor: versionSaveLoading ? 'not-allowed' : 'pointer' }}>
                   {versionSaveLoading ? '…' : 'Save'}
@@ -880,7 +995,7 @@ export default function RewritePage() {
                         <div style={{ color: 'var(--text-dim)', fontSize: 10 }}>{new Date(v.createdAt).toLocaleString()}</div>
                       </div>
                       <button type="button"
-                        onClick={async () => { try { await rewriteApi.versions.restore(articleId, v.id); mutate(); toast.success('Restored'); setVersions(await rewriteApi.versions.list(articleId)); } catch { toast.error('Restore failed'); } }}
+                        onClick={async () => { try { await apis.rewrite.versions.restore(articleId, v.id); mutate(); toast.success('Restored'); setVersions(await apis.rewrite.versions.list(articleId)); } catch { toast.error('Restore failed'); } }}
                         style={{ padding: '3px 8px', fontSize: 10, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-dim)', cursor: 'pointer' }}>
                         Restore
                       </button>
@@ -1031,7 +1146,7 @@ export default function RewritePage() {
           <div className="lg:hidden" style={{ padding: '0 16px 24px' }}>
             <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12 }}>ARTICLE STATUS</div>
             <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
-            {stage === 'done' && (
+            {stage === 'done' && wordpressEnabled && (
               <div style={{ marginTop: 20 }}>
                 <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12 }}>PUBLISH TO WORDPRESS</div>
                 <WPPublishPanel
@@ -1078,7 +1193,7 @@ export default function RewritePage() {
           )}
 
           {/* Stage 3 only: WPPublishPanel + history */}
-          {stage === 'done' && (
+          {stage === 'done' && wordpressEnabled && (
             <>
               <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
                 <WPPublishPanel
@@ -1092,6 +1207,11 @@ export default function RewritePage() {
                 <PublishHistory articleId={articleId} refreshKey={publishHistoryRefreshKey} />
               </div>
             </>
+          )}
+          {stage === 'done' && !wordpressEnabled && (
+            <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: 12, textAlign: 'center', lineHeight: 1.5 }}>
+              Use <strong>Publish to Website</strong> in the header to push this article to the news portal. WordPress publishing is available in Studio.
+            </div>
           )}
         </aside>
 
@@ -1143,11 +1263,20 @@ export default function RewritePage() {
               style={{ flex: 1, padding: '12px 0', fontSize: 12, background: 'var(--card)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
               <RotateCw size={14} /> Re-run
             </button>
+            {wordpressEnabled ? (
             <button onClick={handleOpenPublishSheet}
               style={{ flex: 3, padding: '12px 0', fontSize: 15, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,229,160,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <Send size={16} />
               {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
             </button>
+            ) : (
+            <button onClick={handleOpenWebsitePublish}
+              disabled={!!article.publishedToWebsite}
+              style={{ flex: 3, padding: '12px 0', fontSize: 15, fontWeight: 700, background: article.publishedToWebsite ? 'var(--card)' : 'rgba(33,150,243,0.2)', color: article.publishedToWebsite ? 'var(--text-dim)' : '#1976d2', border: '1px solid var(--border)', borderRadius: 10, cursor: article.publishedToWebsite ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Globe size={16} />
+              {article.publishedToWebsite ? 'On site' : 'Publish to site'}
+            </button>
+            )}
           </>
         )}
       </div>
@@ -1157,17 +1286,126 @@ export default function RewritePage() {
 
       {lockModal}
 
+      {wordpressEnabled && (
       <PrePublishSheet
         open={publishSheetOpen}
         article={article}
         rewrite={rewrite}
         onClose={() => setPublishSheetOpen(false)}
+        onArticleUpdated={() => void mutateArticle()}
         onPublished={() => {
           setPublishSheetOpen(false)
           setPublishHistoryRefreshKey(k => k + 1)
           mutate()
         }}
       />
+      )}
+
+      {/* Publish to Website modal */}
+      {websitePublishModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => !websitePublishLoading && setWebsitePublishModalOpen(false)}>
+          <div style={{ background: 'var(--card)', borderRadius: 12, maxWidth: 440, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: 20, borderBottom: '1px solid var(--border)' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Publish to {DEFAULT_WEBSITE_DOMAIN}</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-dim)' }}>Review and confirm before publishing to the news portal.</p>
+            </div>
+            {websitePublishResult ? (
+              <div style={{ padding: 24, textAlign: 'center' }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--success)', marginBottom: 8 }}>Published to {DEFAULT_WEBSITE_DOMAIN}</div>
+                <p style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 10, textAlign: 'left', wordBreak: 'break-all', fontFamily: 'Geist Mono, monospace', lineHeight: 1.4 }}>
+                  Reader link: {getArticleUrl(websitePublishResult.slug)}
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 4 }}>
+                  <a href={getArticleUrl(websitePublishResult.slug)} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', borderRadius: 8, textDecoration: 'none' }}>View article →</a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(getArticleUrl(websitePublishResult.slug))
+                      toast.success('Reader link copied')
+                    }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    <Copy size={14} /> Copy link
+                  </button>
+                </div>
+                <button onClick={() => { setWebsitePublishModalOpen(false); setWebsitePublishResult(null) }} style={{ display: 'block', width: '100%', marginTop: 16, padding: '8px 0', fontSize: 12, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text-muted)' }}>Close</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>SEO Title (65 chars)</label>
+                    <input value={websiteOverrides.seoTitle} onChange={e => setWebsiteOverrides(o => ({ ...o, seoTitle: e.target.value }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }} placeholder="65 char headline" />
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{websiteOverrides.seoTitle.length}/65</span>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Meta Description</label>
+                    <textarea value={websiteOverrides.seoDescription} onChange={e => setWebsiteOverrides(o => ({ ...o, seoDescription: e.target.value }))} rows={2} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', resize: 'vertical' }} placeholder="120 char description" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Category</label>
+                    <select value={websiteOverrides.category} onChange={e => setWebsiteOverrides(o => ({ ...o, category: e.target.value }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }}>
+                      {['politics', 'business', 'sports', 'technology', 'entertainment', 'world', 'general'].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Featured Image URL</label>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                      <input
+                        value={websiteOverrides.featuredImage}
+                        onChange={e => setWebsiteOverrides(o => ({ ...o, featuredImage: e.target.value }))}
+                        style={{ flex: 1, minWidth: 0, padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }}
+                        placeholder="https://..."
+                      />
+                      <button
+                        type="button"
+                        title="Fetch og:image or first large image from the original article URL"
+                        onClick={() => void handleFetchFeaturedImageFromSource()}
+                        disabled={websiteFetchImageLoading || websitePublishLoading || !article?.url?.startsWith('http')}
+                        style={{
+                          flexShrink: 0,
+                          padding: '0 12px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 8,
+                          color: 'var(--text-muted)',
+                          cursor: websiteFetchImageLoading || websitePublishLoading || !article?.url?.startsWith('http') ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        {websiteFetchImageLoading ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Download size={14} />}
+                        Fetch
+                      </button>
+                    </div>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4, display: 'block' }}>
+                      Auto-filled from article image or the first &lt;img&gt; in rewritten / source HTML. Use Fetch to load og:image from the source page. You can edit before publish.
+                    </span>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Language</label>
+                    <select value={websiteOverrides.language} onChange={e => setWebsiteOverrides(o => ({ ...o, language: e.target.value }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }}>
+                      <option value="english">English</option>
+                      <option value="hindi">Hindi</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setWebsitePublishModalOpen(false)} disabled={websitePublishLoading} style={{ padding: '8px 16px', fontSize: 12, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text-muted)' }}>Cancel</button>
+                  <button onClick={handlePublishToWebsite} disabled={websitePublishLoading} style={{ padding: '8px 20px', fontSize: 12, fontWeight: 600, background: '#1976d2', color: '#fff', border: 'none', borderRadius: 8, cursor: websitePublishLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {websitePublishLoading ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Globe size={14} />}
+                    Confirm & Publish
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

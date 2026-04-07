@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore } from '@/lib/auth-store'
+import { syncAuthCookiesFromStore } from '@/lib/auth-cookies'
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -10,6 +11,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const token = useAuthStore(s => s.token)
   const [checked, setChecked] = useState(false)
   const didSetChecked = useRef(false)
+
+  useEffect(() => {
+    syncAuthCookiesFromStore(() => ({
+      token: useAuthStore.getState().token,
+      cmsToken: useAuthStore.getState().cmsToken,
+    }))
+  }, [token])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, RotateCw, Send, Loader2, Eye, Code } from 'lucide-react'
+import { ArrowLeft, RotateCw, Send, Loader2, Eye, Code, Globe } from 'lucide-react'
 import { RichTextEditor } from './RichTextEditor'
 import { MetaBox } from './MetaBox'
 import { DiffView } from './DiffView'
 import { RewriteStatusStepper } from './RewriteStatusStepper'
+import { RewriteAiUsagePanel } from './RewriteAiUsagePanel'
 import { WPPublishPanel } from './WPPublishPanel'
 import type { ScraperArticle, ArticleRewrite, RewritePass } from '@/types/article'
 import { REWRITE_LANGUAGES, HEADING_FORMATS, SUBHEADING_FORMATS, PARAGRAPH_TAGS } from '@/lib/rewrite-options'
@@ -20,7 +21,7 @@ function wordCount(text: string): number {
   return stripped ? stripped.split(' ').length : 0
 }
 
-const DEFAULT_NEWSPIN_FOOTER = `<h4><em>Long or Short, get news the way you like. No ads. No redirections. Download Newspin and Stay Alert, The CSR Journal Mobile app, for fast, crisp, clean updates!</em></h4>
+const DEFAULT_NEWSPIN_FOOTER = `<h4><em>Long or Short, get news the way you like. No ads. No redirections. Download Newspin and Stay Alert, The Charcha mobile app, for fast, crisp, clean updates!</em></h4>
 <h4><em>App Store – <a href="https://apps.apple.com/in/app/newspin/id6746449540">https://apps.apple.com/in/app/newspin/id6746449540</a></em></h4>
 <h4><em>Google Play Store – <a href="https://play.google.com/store/apps/details?id=com.inventifweb.newspin&pcampaignid=web_share">https://play.google.com/store/apps/details?id=com.inventifweb.newspin&pcampaignid=web_share</a></em></h4>`
 
@@ -52,6 +53,9 @@ interface RewriteEditorLayoutProps {
   publishLoading: boolean
   runningPassIndex: number
   onArticleUpdated?: () => void
+  /** When false, WordPress publish UI is hidden; use `onWebsitePublishClick` for the news site. */
+  wordpressEnabled?: boolean
+  onWebsitePublishClick?: () => void
 }
 
 export function RewriteEditorLayout({
@@ -82,6 +86,8 @@ export function RewriteEditorLayout({
   publishLoading,
   runningPassIndex,
   onArticleUpdated,
+  wordpressEnabled = true,
+  onWebsitePublishClick,
 }: RewriteEditorLayoutProps) {
   const passes = rewrite?.passes ?? []
   const fullPass = getPass(passes, 'full')
@@ -202,6 +208,7 @@ export function RewriteEditorLayout({
           </button>
         )}
         <div style={{ flex: 1 }} />
+        {wordpressEnabled ? (
         <button
           onClick={onPublishClick}
           disabled={!allDone || publishLoading}
@@ -223,6 +230,29 @@ export function RewriteEditorLayout({
           {publishLoading ? <Loader2 size={14} style={{ animation: 'spin 0.6s linear infinite' }} /> : <Send size={14} />}
           {article.wpPostId ? 'Republish to WP →' : 'Publish to WP →'}
         </button>
+        ) : onWebsitePublishClick ? (
+        <button
+          type="button"
+          onClick={onWebsitePublishClick}
+          disabled={!allDone || !!article.publishedToWebsite}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 14px',
+            fontSize: 12,
+            fontWeight: 600,
+            background: allDone && !article.publishedToWebsite ? 'rgba(33,150,243,0.2)' : 'var(--surface)',
+            color: allDone && !article.publishedToWebsite ? '#1976d2' : 'var(--text-dim)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            cursor: allDone && !article.publishedToWebsite ? 'pointer' : 'not-allowed',
+          }}
+        >
+          <Globe size={14} />
+          {article.publishedToWebsite ? 'On website' : 'Publish to site →'}
+        </button>
+        ) : null}
       </div>
 
       <div className="rewrite-editor-layout flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
@@ -480,10 +510,10 @@ export function RewriteEditorLayout({
             Word count: {wordCountVal}
           </div>
 
-          {/* Newspin app footer - editable, appended when publishing to WordPress */}
+          {/* Newspin app footer - editable, appended when publishing */}
           <div>
             <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-              Newspin app footer (appended when publishing to WordPress)
+              Newspin app footer (appended when publishing)
             </label>
             <textarea
               value={rewrite?.customFooter ?? ''}
@@ -531,6 +561,8 @@ export function RewriteEditorLayout({
           className="rewrite-editor-sidebar w-full lg:w-[320px] lg:flex-shrink-0 min-h-0 lg:border-l border-t lg:border-t-0 border-[var(--border)] px-4 pt-3 pb-4 overflow-x-hidden bg-[var(--surface)] lg:overflow-y-auto"
         >
           <RewriteStatusStepper article={article} runningPassIndex={runningPassIndex} passes={passes} />
+
+          <RewriteAiUsagePanel rewrite={rewrite} passes={passes} />
 
           <MetaBox title="Language & Format" defaultOpen={true}>
             <div style={{ marginBottom: 12 }}>
@@ -688,6 +720,44 @@ export function RewriteEditorLayout({
             <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>From RSS feed. Use Category below for WordPress.</div>
           </MetaBox>
 
+          {allDone && (article.approvalScore !== undefined || (article.approvalReasons && article.approvalReasons.length > 0)) && (
+            <div
+              style={{
+                marginTop: 24,
+                padding: 14,
+                background: 'var(--card)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
+                Auto-review score: {article.approvalScore ?? 0}/100
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 8 }}>
+                {article.approvalReasons?.map((r, i) => (
+                  <div key={i} style={{ marginBottom: 4 }}>
+                    {r.startsWith('✓') || r.includes('Good') || r.includes('Acceptable') || r.includes('Has') || r.includes('No sensitive') || r.includes('Trusted')
+                      ? '✓ '
+                      : '⚠️ '}
+                    {r}
+                  </div>
+                ))}
+              </div>
+              {article.approvalStatus === 'pending' && (
+                <div style={{ fontSize: 11, color: 'var(--amber)' }}>
+                  Sent for human review —{' '}
+                  <a href="/approval/" style={{ color: 'var(--accent-light)', textDecoration: 'none' }}>
+                    Review queue →
+                  </a>
+                </div>
+              )}
+              {article.approvalStatus === 'auto_approved' && (
+                <div style={{ fontSize: 11, color: 'var(--green)' }}>✓ Auto-approved</div>
+              )}
+            </div>
+          )}
+
+          {wordpressEnabled && (
           <div style={{ marginTop: 24 }}>
             <WPPublishPanel
               articleId={article.id}
@@ -699,6 +769,7 @@ export function RewriteEditorLayout({
               onArticleUpdated={onArticleUpdated}
             />
           </div>
+          )}
         </div>
         </div>
       </div>

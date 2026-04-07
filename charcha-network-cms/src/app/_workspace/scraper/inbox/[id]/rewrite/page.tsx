@@ -1,0 +1,1409 @@
+'use client'
+
+import { useEffect, useState, useRef } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { ArrowLeft, RotateCw, Send, Loader2, LogOut, ChevronDown, Settings2, Zap, Globe, Clock, Copy, Download } from 'lucide-react'
+import useSWR from 'swr'
+import { useContentWorkspace } from '@/lib/content-workspace'
+import { DEFAULT_WEBSITE_DOMAIN, getArticleUrl } from '@/lib/config'
+import { resolveFeaturedImageUrl } from '@/lib/featured-image'
+import { useRewrite } from '@/hooks/useRewrite'
+import { useArticleLock } from '@/hooks/useArticleLock'
+import { useAuthStore } from '@/lib/auth-store'
+import { LockModal } from '@/components/scraper/LockModal'
+import { RewritePassCard } from '@/components/scraper/RewritePassCard'
+import { RewriteStatusStepper } from '@/components/scraper/RewriteStatusStepper'
+import { WPPublishPanel } from '@/components/scraper/WPPublishPanel'
+import { RewritePipelineStrip } from '@/components/scraper/RewritePipelineStrip'
+import { RewriteEditorLayout } from '@/components/scraper/RewriteEditorLayout'
+import { REWRITE_LANGUAGES, HEADING_FORMATS, SUBHEADING_FORMATS, PARAGRAPH_TAGS, REWRITE_TONES, REWRITE_AUDIENCES } from '@/lib/rewrite-options'
+import { PrePublishSheet } from '@/components/scraper/PrePublishSheet'
+import { PublishHistory } from '@/components/scraper/PublishHistory'
+import toast from 'react-hot-toast'
+import type { ScraperArticle } from '@/types/article'
+
+export default function RewritePage() {
+  const { apis, routePrefix, mode, wordpressEnabled } = useContentWorkspace()
+  const inboxListPath = `${routePrefix.inbox}/`
+  const params = useParams()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const articleId = params?.id as string
+  const [selectedPassIds, setSelectedPassIds] = useState<Set<string>>(new Set())
+  const [lockModalOpen, setLockModalOpen] = useState(false)
+  const [lockConflict, setLockConflict] = useState<{
+    lockedBy: string
+    lockedByName: string
+    expiresAt: string | null
+  } | null>(null)
+  const [takeOverLoading, setTakeOverLoading] = useState(false)
+  const hasAttemptedLock = useRef(false)
+  const hasRefetchedForApproval = useRef(false)
+
+  const { data: article, error: articleError, isLoading: articleLoading, mutate: mutateArticle } = useSWR(
+    articleId ? `${mode}-article-${articleId}` : null,
+    () => apis.inbox.get(articleId).then(r => r.data?.data as ScraperArticle)
+  )
+  const {
+    lockedByMe,
+    acquireLock,
+    releaseLock,
+  } = useArticleLock(articleId)
+  const isAdmin = useAuthStore(s => !!s.cmsUser?.isAdmin)
+  const {
+    rewrite,
+    isLoading: rewriteLoading,
+    isError: rewriteError,
+    error: rewriteErrorMessage,
+    startRewrite,
+    rerunPasses,
+    updatePassOutput,
+    updateCustomFooter,
+    resetPass,
+    publishToWP,
+    mutate,
+  } = useRewrite(articleId, article?.rewrite)
+
+  const passes = rewrite?.passes ?? []
+  const allDone = passes.length > 0 && passes.every(p => p.status === 'DONE')
+  const runningIndex = passes.findIndex(p => p.status === 'RUNNING')
+
+  // ─── 3-step wizard stage ─────────────────────────────────────────────────────
+  const stage: 'configure' | 'running' | 'done' =
+    passes.length === 0 || passes.every(p => p.status === 'IDLE') ? 'configure'
+    : allDone ? 'done'
+    : 'running'
+
+  const totalPasses = passes.length
+  const donePasses = passes.filter(p => p.status === 'DONE').length
+  const progressPct = totalPasses > 0 ? Math.round((donePasses / totalPasses) * 100) : 0
+  const selectedCount = selectedPassIds.size
+  const [quickDraftLoading, setQuickDraftLoading] = useState(false)
+  const [topbarPublishLoading, setTopbarPublishLoading] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'editor' | 'cards'>('cards')
+  const [versions, setVersions] = useState<import('@/types/article').RewriteVersion[]>([])
+  const [versionLabel, setVersionLabel] = useState('')
+  const [versionSaveLoading, setVersionSaveLoading] = useState(false)
+  const [publishSheetOpen, setPublishSheetOpen] = useState(false)
+  const [publishHistoryRefreshKey, setPublishHistoryRefreshKey] = useState(0)
+  const [websitePublishModalOpen, setWebsitePublishModalOpen] = useState(false)
+  const [websitePublishLoading, setWebsitePublishLoading] = useState(false)
+  const [websiteFetchImageLoading, setWebsiteFetchImageLoading] = useState(false)
+  const [websitePublishResult, setWebsitePublishResult] = useState<{ slug: string } | null>(null)
+  const [websiteOverrides, setWebsiteOverrides] = useState({ seoTitle: '', seoDescription: '', category: '', featuredImage: '', language: 'english' })
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(true)
+  const [headlineSuggestions, setHeadlineSuggestions] = useState<string[]>([])
+  const [headlineLoading, setHeadlineLoading] = useState(false)
+  const [keywordSuggestions, setKeywordSuggestions] = useState<string[]>([])
+  const [keywordLoading, setKeywordLoading] = useState(false)
+  const [outputLanguage, setOutputLanguage] = useState<string>('english')
+  const [customPrompt, setCustomPrompt] = useState<string>('')
+  const [headingFormat, setHeadingFormat] = useState<string>('h1')
+  const [subheadingFormat, setSubheadingFormat] = useState<string>('h2')
+  const [paragraphTag, setParagraphTag] = useState<string>('h4')
+  const [tone, setTone] = useState<string>('')
+  const [targetAudience, setTargetAudience] = useState<string>('')
+  const [customInstruction, setCustomInstruction] = useState<string>('')
+  const [targetWordCount, setTargetWordCount] = useState<number>(580)
+
+  const { data: sources } = useSWR(`${mode}-rewrite-sources`, () => apis.sources.list().then(r => r.data?.data || []))
+  const sourceCustomPrompt = article?.sourceId
+    ? (sources || []).find((s: { id: string; customPrompt?: string }) => s.id === article.sourceId)?.customPrompt
+    : undefined
+  const sourceDefaultLang = article?.sourceId
+    ? (sources || []).find((s: { id: string; defaultOutputLanguage?: string }) => s.id === article.sourceId)?.defaultOutputLanguage
+    : undefined
+
+  useEffect(() => {
+    const lang = rewrite?.outputLanguage || sourceDefaultLang || 'english'
+    setOutputLanguage(lang)
+  }, [rewrite?.outputLanguage, sourceDefaultLang])
+
+  useEffect(() => {
+    if (rewrite?.customPrompt !== undefined) setCustomPrompt(rewrite.customPrompt || '')
+    else if (sourceCustomPrompt) setCustomPrompt(sourceCustomPrompt)
+  }, [rewrite?.customPrompt, sourceCustomPrompt])
+  useEffect(() => {
+    if (rewrite?.tone !== undefined) setTone(rewrite.tone || '')
+    if (rewrite?.targetAudience !== undefined) setTargetAudience(rewrite.targetAudience || '')
+    const trendKeyword = searchParams.get('trendKeyword')
+    const trendTraffic = searchParams.get('trendTraffic')
+    if (trendKeyword && trendTraffic) {
+      setCustomInstruction(
+        `Optimize this article for the keyword: ${trendKeyword}. This keyword is trending with ${trendTraffic} searches. Make sure the title and first paragraph prominently feature this keyword.`
+      )
+    } else if (rewrite?.customInstruction !== undefined) {
+      setCustomInstruction(rewrite.customInstruction || '')
+    }
+    if (rewrite?.targetWordCount != null) setTargetWordCount(rewrite.targetWordCount)
+  }, [rewrite?.tone, rewrite?.targetAudience, rewrite?.customInstruction, rewrite?.targetWordCount, searchParams])
+
+  useEffect(() => {
+    if (!articleId) return
+    apis.rewrite.versions.list(articleId).then(setVersions).catch(() => setVersions([]))
+  }, [articleId, rewrite?.passes, apis.rewrite])
+
+  // Refetch article when rewrite completes to get approval score/reasons from backend
+  useEffect(() => {
+    if (allDone && articleId && !hasRefetchedForApproval.current) {
+      hasRefetchedForApproval.current = true
+      mutateArticle()
+    }
+    if (!allDone) hasRefetchedForApproval.current = false
+  }, [allDone, articleId, mutateArticle])
+
+  // Auto-collapse settings accordion based on wizard stage
+  useEffect(() => {
+    if (stage === 'running') setMobileSettingsOpen(false)
+    if (stage === 'configure') setMobileSettingsOpen(true)
+  }, [stage])
+
+  // Acquire lock when article is loaded
+  useEffect(() => {
+    if (!articleId || !article || hasAttemptedLock.current) return
+    hasAttemptedLock.current = true
+    acquireLock().then(result => {
+      if (!result.ok) {
+        setLockConflict({
+          lockedBy: result.lockedBy,
+          lockedByName: result.lockedByName,
+          expiresAt: result.expiresAt,
+        })
+        setLockModalOpen(true)
+      }
+    }).catch(() => {
+      hasAttemptedLock.current = false
+    })
+    return () => {
+      hasAttemptedLock.current = false
+    }
+  }, [articleId, article, acquireLock])
+
+  // Release lock on unmount
+  useEffect(() => {
+    return () => {
+      if (articleId && lockedByMe) {
+        apis.inbox.unlock(articleId).catch(() => {})
+      }
+    }
+  }, [articleId, lockedByMe, apis.inbox])
+
+  // Release lock on page close (beforeunload)
+  useEffect(() => {
+    const handler = () => {
+      if (articleId && lockedByMe) {
+        const token = typeof window !== 'undefined' && (() => {
+          try {
+            const s = localStorage.getItem('charcha-cms-auth')
+            if (!s) return null
+            const p = JSON.parse(s) as { state?: { cmsToken?: string | null } }
+            return p?.state?.cmsToken ?? null
+          } catch { return null }
+        })()
+        if (token) {
+          fetch(`/api/inbox/${articleId}/unlock`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            keepalive: true,
+          }).catch(() => {})
+        }
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', handler)
+      return () => window.removeEventListener('beforeunload', handler)
+    }
+  }, [articleId, lockedByMe])
+
+  const handleGoBack = () => {
+    setLockModalOpen(false)
+    setLockConflict(null)
+    router.push(inboxListPath)
+  }
+
+  const handleTakeOver = async () => {
+    if (!articleId || !isAdmin) return
+    setTakeOverLoading(true)
+    try {
+      const result = await acquireLock(true)
+      if (result.ok) {
+        setLockModalOpen(false)
+        setLockConflict(null)
+      } else {
+        setLockConflict({
+          lockedBy: result.lockedBy,
+          lockedByName: result.lockedByName,
+          expiresAt: result.expiresAt,
+        })
+      }
+    } finally {
+      setTakeOverLoading(false)
+    }
+  }
+
+  const handleReleaseArticle = async () => {
+    await releaseLock()
+    router.push(inboxListPath)
+  }
+
+  const rewriteOpts = () => ({
+    outputLanguage,
+    customPrompt: customPrompt.trim() || undefined,
+    headingFormat,
+    subheadingFormat,
+    paragraphTag,
+    tone: tone || undefined,
+    targetAudience: targetAudience || undefined,
+    customInstruction: customInstruction.trim() || undefined,
+    targetWordCount: targetWordCount >= 100 && targetWordCount <= 2000 ? targetWordCount : undefined,
+  })
+
+  const handleStartRewrite = async () => {
+    setStartError(null)
+    try {
+      await startRewrite(rewriteOpts())
+      toast.success('Started AI rewrite')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to start'
+      setStartError(msg)
+      toast.error(msg)
+    }
+  }
+
+  const handleStartWithFetch = async () => {
+    setStartError(null)
+    try {
+      await apis.inbox.fetchFull(articleId)
+      mutate()
+      await startRewrite(rewriteOpts())
+      toast.success('Fetched full article and started AI rewrite')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed'
+      setStartError(msg)
+      toast.error(msg)
+    }
+  }
+
+  const handleToggleSelect = (passId: string) => {
+    setSelectedPassIds(prev => {
+      const next = new Set(prev)
+      if (next.has(passId)) next.delete(passId)
+      else next.add(passId)
+      return next
+    })
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) setSelectedPassIds(new Set(passes.map(p => p.id)))
+    else setSelectedPassIds(new Set())
+  }
+
+  const handleRerunSelected = async () => {
+    if (selectedCount === 0) return
+    try {
+      await rerunPasses(Array.from(selectedPassIds), rewriteOpts())
+      toast.success(`Re-running ${selectedCount} pass(es)`)
+      setSelectedPassIds(new Set())
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Re-run failed')
+    }
+  }
+
+  const handleRerunSingle = async (passId: string) => {
+    try {
+      await rerunPasses([passId], rewriteOpts())
+      toast.success('Re-running pass…')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Re-run failed')
+    }
+  }
+
+  const handleResetSingle = async (passId: string, originalOutput: string) => {
+    try {
+      await resetPass(passId, originalOutput)
+      toast.success('Reset to original')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Reset failed')
+    }
+  }
+
+  const handleRerunAll = async () => {
+    setStartError(null)
+    try {
+      await startRewrite(rewriteOpts())
+      toast.success('Re-running all passes')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Re-run failed'
+      setStartError(msg)
+      toast.error(msg)
+    }
+  }
+
+  const handlePublish = async (opts: {
+    status: string
+    categoryId: string
+    authorId: string
+    tagNames?: string[]
+    featuredMediaId?: number
+    wordpressSiteId?: string
+  }) => {
+    try {
+      await publishToWP(opts)
+      toast.success(opts.status === 'draft' ? 'Saved as draft ✓' : 'Published to WordPress ✓')
+      router.push(inboxListPath)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Publish failed')
+    }
+  }
+
+  const handleOpenPublishSheet = () => {
+    if (!allDone) { toast.error('Complete all rewrite passes first'); return }
+    setPublishSheetOpen(true)
+  }
+
+  const char65 = passes.find(p => p.id === 'char65')?.output || ''
+  const char120 = passes.find(p => p.id === 'char120')?.output || ''
+  const src = (sources || []).find((s: { id: string }) => s.id === article?.sourceId) as { category?: string } | undefined
+  const defaultCategory = (src?.category || 'general').toLowerCase().replace(/\s+/g, '-')
+
+  const handleOpenWebsitePublish = () => {
+    if (!allDone) { toast.error('Complete all rewrite passes first'); return }
+    setWebsitePublishResult(null)
+    setWebsiteOverrides({
+      seoTitle: char65,
+      seoDescription: char120,
+      category: defaultCategory,
+      featuredImage: article ? resolveFeaturedImageUrl(article, rewrite ?? undefined) : '',
+      language: rewrite?.outputLanguage || outputLanguage || 'english',
+    })
+    setWebsitePublishModalOpen(true)
+  }
+
+  const handleFetchFeaturedImageFromSource = async () => {
+    if (!articleId) return
+    if (!article?.url?.startsWith('http')) {
+      toast.error('Article has no source URL to fetch from')
+      return
+    }
+    setWebsiteFetchImageLoading(true)
+    try {
+      const { image } = await apis.inbox.extractImage(articleId)
+      setWebsiteOverrides(o => ({ ...o, featuredImage: image }))
+      await mutateArticle()
+      toast.success('Image fetched from source page')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not fetch image')
+    } finally {
+      setWebsiteFetchImageLoading(false)
+    }
+  }
+
+  const handlePublishToWebsite = async () => {
+    if (!articleId) return
+    setWebsitePublishLoading(true)
+    try {
+      const { slug } = await apis.website.publish(articleId, {
+        title: websiteOverrides.seoTitle || undefined,
+        category: websiteOverrides.category || undefined,
+        featuredImage: websiteOverrides.featuredImage || undefined,
+        language: websiteOverrides.language || undefined,
+      })
+      setWebsitePublishResult({ slug })
+      mutateArticle()
+      toast.success(`Published to ${DEFAULT_WEBSITE_DOMAIN}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Publish failed')
+    } finally {
+      setWebsitePublishLoading(false)
+    }
+  }
+
+  const handleReject = async () => {
+    try {
+      await apis.inbox.reject(articleId)
+      toast.success('Article rejected')
+      router.push(inboxListPath)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Reject failed')
+    }
+  }
+
+  const handleQuickDraft = async () => {
+    if (!allDone) return
+    setQuickDraftLoading(true)
+    try {
+      await publishToWP({ status: 'draft', categoryId: '', authorId: '' })
+      toast.success('Published to WordPress ✓')
+      router.push(inboxListPath)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Publish failed')
+    } finally {
+      setQuickDraftLoading(false)
+    }
+  }
+
+  if (articleError) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
+        <div style={{ color: 'var(--red)', fontSize: 14, textAlign: 'center' }}>
+          {articleError?.message || 'Failed to load article'}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+          Ensure contentflow-backend is running on port 4500 and <code style={{ fontSize: 11 }}>NEXT_PUBLIC_CHARCHA_API_URL</code> in{' '}
+          <code style={{ fontSize: 11 }}>charcha-network-cms/.env.local</code> is set to <code style={{ fontSize: 11 }}>http://localhost:4500/api</code>.
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            onClick={() => router.push(inboxListPath)}
+            style={{ padding: '8px 16px', fontSize: 12, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
+          >
+            Back to Inbox
+          </button>
+          <button
+            onClick={() => mutateArticle()}
+            style={{ padding: '8px 16px', fontSize: 12, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!article && articleLoading) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--text-muted)' }}>
+        <Loader2 size={32} style={{ animation: 'spin 0.8s linear infinite' }} />
+        <span style={{ fontSize: 14 }}>Loading article…</span>
+      </div>
+    )
+  }
+
+  if (!article) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
+        <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Article not found</span>
+        <button
+          onClick={() => router.push(inboxListPath)}
+          style={{ padding: '8px 16px', fontSize: 12, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
+        >
+          Back to Inbox
+        </button>
+      </div>
+    )
+  }
+
+  // ─── Reusable style tokens ───────────────────────────────────────────────────
+  const sInput: React.CSSProperties = {
+    width: '100%', padding: '8px 10px', fontSize: 13,
+    background: 'var(--card)', border: '1px solid var(--border)',
+    borderRadius: 8, color: 'var(--text)', fontFamily: 'inherit', outline: 'none',
+  }
+  const sLabel: React.CSSProperties = {
+    display: 'block', fontSize: 11, fontWeight: 600,
+    color: 'var(--text-muted)', marginBottom: 5, letterSpacing: '0.02em',
+  }
+
+  const showEditorLayout = viewMode === 'editor' && passes.length > 0 && !passes.every(p => p.status === 'IDLE')
+
+  const lockModal = (
+    <LockModal
+      open={lockModalOpen}
+      onOpenChange={setLockModalOpen}
+      editorName={lockConflict?.lockedByName ?? 'Unknown'}
+      expiresAt={lockConflict?.expiresAt ?? null}
+      isAdmin={!!isAdmin}
+      onGoBack={handleGoBack}
+      onTakeOver={handleTakeOver}
+      takeOverLoading={takeOverLoading}
+    />
+  )
+
+  if (showEditorLayout) {
+    return (
+      <>
+        <RewriteEditorLayout
+        article={article}
+        rewrite={rewrite}
+        onOutputChange={(passId, value) => updatePassOutput(passId, value)}
+        onCustomFooterChange={updateCustomFooter}
+        onPublish={handlePublish}
+        onReject={handleReject}
+        onBack={() => router.push(inboxListPath)}
+        onRerunAll={handleRerunAll}
+        onFetchAndRerun={handleStartWithFetch}
+        onSwitchToCards={() => setViewMode('cards')}
+        onReleaseArticle={handleReleaseArticle}
+        lockedByMe={lockedByMe}
+        outputLanguage={outputLanguage}
+        customPrompt={customPrompt}
+        onOutputLanguageChange={setOutputLanguage}
+        onCustomPromptChange={setCustomPrompt}
+        headingFormat={headingFormat}
+        subheadingFormat={subheadingFormat}
+        paragraphTag={paragraphTag}
+        onHeadingFormatChange={setHeadingFormat}
+        onSubheadingFormatChange={setSubheadingFormat}
+        onParagraphTagChange={setParagraphTag}
+        onPublishClick={async () => {
+          setTopbarPublishLoading(true)
+          try {
+            await handlePublish({ status: 'draft', categoryId: '', authorId: '' })
+          } finally {
+            setTopbarPublishLoading(false)
+          }
+        }}
+        allDone={allDone}
+        publishLoading={topbarPublishLoading}
+        runningPassIndex={runningIndex >= 0 ? runningIndex : 0}
+        onArticleUpdated={mutateArticle}
+        wordpressEnabled={wordpressEnabled}
+        onWebsitePublishClick={handleOpenWebsitePublish}
+      />
+      {lockModal}
+      </>
+    )
+  }
+
+  // ─── Shared settings form ────────────────────────────────────────────────────
+  const settingsForm = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Language + Tone row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div>
+          <label style={sLabel}>Language</label>
+          <select value={outputLanguage} onChange={e => setOutputLanguage(e.target.value)} style={sInput}>
+            {REWRITE_LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={sLabel}>Tone</label>
+          <select value={tone} onChange={e => setTone(e.target.value)} style={sInput}>
+            {REWRITE_TONES.map(t => <option key={t.value || 'default'} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Audience + Word count */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div>
+          <label style={sLabel}>Audience</label>
+          <select value={targetAudience} onChange={e => setTargetAudience(e.target.value)} style={sInput}>
+            {REWRITE_AUDIENCES.map(a => <option key={a.value || 'general'} value={a.value}>{a.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={sLabel}>Words: {targetWordCount}</label>
+          <input type="range" min={100} max={2000} step={50} value={targetWordCount}
+            onChange={e => setTargetWordCount(Number(e.target.value))}
+            style={{ width: '100%', accentColor: 'var(--accent)', marginTop: 6 }} />
+        </div>
+      </div>
+
+      {/* Format row */}
+      <div>
+        <label style={sLabel}>Format</label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+          <select value={headingFormat} onChange={e => setHeadingFormat(e.target.value)}
+            style={{ ...sInput, padding: '6px 8px', fontSize: 12 }}>
+            {HEADING_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </select>
+          <select value={subheadingFormat} onChange={e => setSubheadingFormat(e.target.value)}
+            style={{ ...sInput, padding: '6px 8px', fontSize: 12 }}>
+            {SUBHEADING_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </select>
+          <select value={paragraphTag} onChange={e => setParagraphTag(e.target.value)}
+            style={{ ...sInput, padding: '6px 8px', fontSize: 12 }}>
+            {PARAGRAPH_TAGS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 4, fontSize: 10, color: 'var(--text-dim)' }}>
+          <span style={{ flex: 1, textAlign: 'center' }}>Heading</span>
+          <span style={{ flex: 1, textAlign: 'center' }}>Subheading</span>
+          <span style={{ flex: 1, textAlign: 'center' }}>Paragraph</span>
+        </div>
+      </div>
+
+      {/* Custom instruction */}
+      <div>
+        <label style={sLabel}>Custom instruction</label>
+        <input type="text" value={customInstruction} onChange={e => setCustomInstruction(e.target.value)}
+          placeholder="e.g. Focus on Indian context, Add statistics" style={sInput} />
+      </div>
+
+      {/* Custom prompt */}
+      <div>
+        <label style={sLabel}>Custom prompt <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>(optional)</span></label>
+        <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)}
+          placeholder="Override prompt. Use {{LANGUAGE}}, {{TITLE}}, {{CONTENT}}"
+          rows={3} style={{ ...sInput, resize: 'vertical' }} />
+      </div>
+
+      {/* AI Suggestions */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <button type="button"
+          onClick={async () => { setHeadlineLoading(true); setHeadlineSuggestions([]); try { const d = await apis.rewrite.suggestHeadlines(articleId); setHeadlineSuggestions(d.headlines || []); if (!d.headlines?.length) toast.error('No suggestions'); } catch { toast.error('Failed to suggest'); } finally { setHeadlineLoading(false); } }}
+          disabled={headlineLoading}
+          style={{ padding: '8px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(108,99,255,0.08)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 8, cursor: headlineLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+          <Zap size={12} />{headlineLoading ? '…' : 'Suggest Headlines'}
+        </button>
+        <button type="button"
+          onClick={async () => { setKeywordLoading(true); setKeywordSuggestions([]); try { const d = await apis.rewrite.suggestKeywords(articleId); setKeywordSuggestions(d.keywords || []); if (!d.keywords?.length) toast.error('No keywords'); } catch { toast.error('Failed'); } finally { setKeywordLoading(false); } }}
+          disabled={keywordLoading}
+          style={{ padding: '8px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(0,212,255,0.06)', color: 'var(--cyan)', border: '1px solid rgba(0,212,255,0.15)', borderRadius: 8, cursor: keywordLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+          <Zap size={12} />{keywordLoading ? '…' : 'NLP Keywords'}
+        </button>
+      </div>
+      {headlineSuggestions.length > 0 && (
+        <div style={{ background: 'var(--card)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: '1px' }}>HEADLINES</div>
+          {headlineSuggestions.map((h, i) => (
+            <div key={i} style={{ fontSize: 12, color: 'var(--text)', padding: '4px 0', borderTop: i > 0 ? '1px solid var(--border-subtle)' : 'none' }}>{i + 1}. {h}</div>
+          ))}
+        </div>
+      )}
+      {keywordSuggestions.length > 0 && (
+        <div style={{ background: 'var(--card)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)' }}>
+          {keywordSuggestions.join(' · ')}
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--bg)' }}>
+
+      {/* ═══ HEADER — Desktop ═══════════════════════════════════════════════════ */}
+      <header className="hidden lg:flex" style={{
+        alignItems: 'center', gap: 12, padding: '0 20px', height: 56,
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--surface)',
+        flexShrink: 0,
+      }}>
+        <button onClick={() => router.push(inboxListPath)}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer', padding: '4px 0', flexShrink: 0 }}>
+          <ArrowLeft size={15} /> Inbox
+        </button>
+        <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
+
+        {/* Stage breadcrumb */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {(['configure', 'running', 'done'] as const).map((s, i) => (
+            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {i > 0 && <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>›</span>}
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+                background: stage === s ? (s === 'done' ? 'rgba(0,229,160,0.15)' : 'rgba(108,99,255,0.15)') : 'transparent',
+                color: stage === s ? (s === 'done' ? 'var(--success)' : 'var(--accent-light)') : 'var(--text-dim)',
+                border: stage === s ? `1px solid ${s === 'done' ? 'rgba(0,229,160,0.3)' : 'rgba(108,99,255,0.3)'}` : '1px solid transparent',
+              }}>
+                {s === 'configure' ? '1 · Configure' : s === 'running' ? '2 · Writing…' : '3 · Review & Publish'}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Article title */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {article.source?.name && (
+            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'rgba(108,99,255,0.12)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', fontWeight: 700, flexShrink: 0 }}>
+              {article.source.name}
+            </span>
+          )}
+          <span style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+            {article.title}
+          </span>
+        </div>
+
+        {/* Actions — context-sensitive per stage */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {lockedByMe && (
+            <button onClick={handleReleaseArticle}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', fontSize: 11, background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+              <LogOut size={11} /> Release
+            </button>
+          )}
+          {/* Stage 2+: view toggle + re-run */}
+          {stage !== 'configure' && (
+            <>
+              {passes.length > 0 && !passes.every(p => p.status === 'IDLE') && (
+                <button onClick={() => setViewMode(m => m === 'editor' ? 'cards' : 'editor')}
+                  style={{ padding: '5px 10px', fontSize: 11, background: viewMode === 'cards' ? 'rgba(108,99,255,0.12)' : 'var(--card)', color: viewMode === 'cards' ? 'var(--accent-light)' : 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+                  {viewMode === 'editor' ? 'Card view' : 'Editor view'}
+                </button>
+              )}
+              <button onClick={handleRerunSelected} disabled={selectedCount === 0}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', fontSize: 11, background: 'var(--card)', color: selectedCount > 0 ? 'var(--accent-light)' : 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 8, cursor: selectedCount > 0 ? 'pointer' : 'not-allowed', opacity: selectedCount > 0 ? 1 : 0.5 }}>
+                <RotateCw size={11} /> Re-run ({selectedCount})
+              </button>
+              <button onClick={handleRerunAll}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.25)', borderRadius: 8, cursor: 'pointer' }}>
+                <RotateCw size={11} /> Re-run All
+              </button>
+            </>
+          )}
+          {/* Stage 3 only: Publish to Website + Release buttons */}
+          {stage === 'done' && (
+            <>
+              <button onClick={handleOpenWebsitePublish} disabled={!!article.publishedToWebsite}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, background: article.publishedToWebsite ? 'var(--card)' : 'rgba(33,150,243,0.15)', color: article.publishedToWebsite ? 'var(--text-dim)' : '#1976d2', border: '1px solid var(--border)', borderRadius: 8, cursor: article.publishedToWebsite ? 'not-allowed' : 'pointer' }}
+                title={article.publishedToWebsite ? 'Already on website' : `Publish to ${DEFAULT_WEBSITE_DOMAIN}`}>
+                <Globe size={13} />
+                {article.publishedToWebsite ? '🌐 On Website' : '🌐 Publish to Website'}
+              </button>
+              {wordpressEnabled && (
+              <button onClick={handleOpenPublishSheet}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', boxShadow: '0 2px 16px rgba(0,229,160,0.45)', animation: 'pulse-green 2s infinite' }}>
+                <Send size={13} />
+                {article.wpPostId ? '🌐 Update Post' : '📤 Release to WordPress'}
+              </button>
+              )}
+            </>
+          )}
+        </div>
+      </header>
+
+      {/* ═══ HEADER — Mobile ════════════════════════════════════════════════════ */}
+      <header className="lg:hidden flex" style={{
+        alignItems: 'center', gap: 10, padding: '0 16px', height: 52,
+        borderBottom: '1px solid var(--border)', background: 'var(--surface)',
+        flexShrink: 0, position: 'sticky', top: 0, zIndex: 30,
+      }}>
+        <button onClick={() => router.push(inboxListPath)}
+          style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', color: 'var(--text-muted)', padding: '6px', cursor: 'pointer', borderRadius: 8 }}>
+          <ArrowLeft size={20} />
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+            {stage === 'configure' ? 'Configure Rewrite' : stage === 'running' ? 'AI Writing…' : 'Review & Publish'}
+          </div>
+          {stage === 'running' && runningIndex >= 0 && (
+            <div style={{ fontSize: 10, color: 'var(--accent-light)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Loader2 size={9} style={{ animation: 'spin 0.8s linear infinite' }} />
+              Pass {runningIndex + 1} of {totalPasses} · {progressPct}% done
+            </div>
+          )}
+          {stage === 'done' && (
+            <div style={{ fontSize: 10, color: 'var(--success)', fontWeight: 600 }}>✓ All {totalPasses} passes complete — ready to publish!</div>
+          )}
+        </div>
+        {lockedByMe && (
+          <button onClick={handleReleaseArticle}
+            style={{ padding: '5px 8px', fontSize: 11, background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>
+            Release
+          </button>
+        )}
+        {/* Only show in header on mobile when done */}
+        {stage === 'done' && (
+          <>
+            {!article.publishedToWebsite && (
+              <button onClick={handleOpenWebsitePublish}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(33,150,243,0.15)', color: '#1976d2', border: '1px solid rgba(33,150,243,0.3)', borderRadius: 6, cursor: 'pointer' }}>
+                <Globe size={11} /> Website
+              </button>
+            )}
+            {wordpressEnabled && (
+            <button onClick={handleOpenPublishSheet}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', fontSize: 12, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,229,160,0.4)' }}>
+              <Send size={12} />{article.wpPostId ? 'Update' : 'Release'}
+            </button>
+            )}
+          </>
+        )}
+      </header>
+
+      {/* ═══ MOBILE: Pipeline strip — visible only when passes exist ═══════════ */}
+      {stage !== 'configure' && (
+        <div className="lg:hidden" style={{ flexShrink: 0, borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg)' }}>
+          <RewritePipelineStrip passes={passes} />
+        </div>
+      )}
+
+      {/* ═══ STAGE 2: Full-width progress banner ═══════════════════════════════ */}
+      {stage === 'running' && (
+        <div style={{
+          flexShrink: 0, padding: '10px 20px',
+          background: 'linear-gradient(90deg, rgba(108,99,255,0.12), rgba(0,212,255,0.06))',
+          borderBottom: '1px solid rgba(108,99,255,0.2)',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <Loader2 size={16} style={{ color: 'var(--accent-light)', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-light)', marginBottom: 5 }}>
+              AI is rewriting… Pass {Math.max(runningIndex + 1, donePasses)} of {totalPasses}
+            </div>
+            <div style={{ height: 5, background: 'rgba(108,99,255,0.15)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 3,
+                background: 'linear-gradient(90deg, var(--accent), var(--cyan))',
+                width: `${progressPct}%`,
+                transition: 'width 0.6s ease',
+                boxShadow: '0 0 8px rgba(108,99,255,0.6)',
+              }} />
+            </div>
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-dim)', flexShrink: 0 }}>{progressPct}%</span>
+        </div>
+      )}
+
+      {/* ═══ STAGE 3: Completion banner ════════════════════════════════════════ */}
+      {stage === 'done' && (
+        <div style={{
+          flexShrink: 0, padding: '10px 20px',
+          background: 'linear-gradient(90deg, rgba(0,229,160,0.12), rgba(0,180,120,0.06))',
+          borderBottom: '1px solid rgba(0,229,160,0.25)',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 16 }}>✅</span>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>
+              Rewrite complete — {totalPasses} passes done
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>
+              {wordpressEnabled
+                ? 'Review the content below, then hit Release to publish.'
+                : 'Review the content below, then publish to the news site.'}
+            </span>
+          </div>
+          {wordpressEnabled && (
+          <button onClick={handleOpenPublishSheet}
+            className="hidden lg:flex"
+            style={{ alignItems: 'center', gap: 6, padding: '8px 20px', fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,229,160,0.4)' }}>
+            <Send size={13} /> {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
+          </button>
+          )}
+        </div>
+      )}
+
+      {/* ═══ BODY ═══════════════════════════════════════════════════════════════ */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+        {/* ─── DESKTOP LEFT SIDEBAR ────────────────────────────────────────────── */}
+        <aside className="hidden lg:flex" style={{
+          width: 270, flexShrink: 0, flexDirection: 'column',
+          borderRight: '1px solid var(--border)',
+          background: 'var(--surface)',
+          overflowY: 'auto', overflowX: 'hidden',
+        }}>
+          {/* Article info — always visible */}
+          <div style={{ padding: '16px 16px 0' }}>
+            <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 10 }}>ARTICLE</div>
+            <div style={{ padding: 12, background: 'var(--card)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 4, lineHeight: 1.4 }}>{article.title}</div>
+              {article.wordCount != null && (
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Clock size={9} /> {article.wordCount} words
+                  {article.wordCount < 300 && <span style={{ color: 'var(--amber)', background: 'var(--amber-bg)', padding: '1px 5px', borderRadius: 4 }}>Thin content</span>}
+                </div>
+              )}
+              {typeof article.url === 'string' && article.url.startsWith('http') && (
+                <a href={article.url} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 10, color: 'var(--cyan)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Globe size={9} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{article.url}</span>
+                </a>
+              )}
+            </div>
+            {rewrite?.quality && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 12 }}>
+                {[
+                  { label: `${rewrite.quality.wordCount}w`, title: 'Word count' },
+                  { label: `~${rewrite.quality.readTime}min`, title: 'Reading time' },
+                  rewrite.quality.seoScore != null ? { label: `SEO ${rewrite.quality.seoScore}`, title: 'SEO score' } : null,
+                ].filter(Boolean).map((q, i) => (
+                  <span key={i} title={q!.title} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 20, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                    {q!.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Stage 1: Full settings + start buttons */}
+          {stage === 'configure' && (
+            <div style={{ padding: '0 16px 16px' }}>
+              <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Settings2 size={10} /> AI SETTINGS
+              </div>
+              {settingsForm}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+                <button onClick={handleStartRewrite} disabled={rewriteLoading}
+                  style={{ width: '100%', padding: '12px 0', fontSize: 14, fontWeight: 700, background: 'linear-gradient(135deg,var(--accent),#8b5cf6)', color: '#fff', border: 'none', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 2px 16px rgba(108,99,255,0.4)' }}>
+                  {rewriteLoading ? <Loader2 size={15} style={{ animation: 'spin 0.6s linear infinite' }} /> : <Zap size={15} />}
+                  Start Rewrite
+                </button>
+                <button onClick={handleStartWithFetch} disabled={rewriteLoading}
+                  style={{ width: '100%', padding: '9px 0', fontSize: 12, background: 'var(--card)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer' }}>
+                  Fetch full article & Rewrite
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Stage 2+: Collapsed re-run settings toggle */}
+          {stage !== 'configure' && (
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+              <button onClick={() => setMobileSettingsOpen(o => !o)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: mobileSettingsOpen ? '8px 8px 0 0' : 8, cursor: 'pointer' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
+                  <Settings2 size={12} style={{ color: 'var(--text-dim)' }} /> Re-run settings
+                </span>
+                <ChevronDown size={14} style={{ color: 'var(--text-dim)', transform: mobileSettingsOpen ? 'rotate(180deg)' : 'rotate(0)', transition: '0.2s' }} />
+              </button>
+              {mobileSettingsOpen && (
+                <div style={{ padding: 12, background: 'var(--card)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+                  {settingsForm}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+                    <button onClick={handleStartWithFetch}
+                      style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 8, cursor: 'pointer' }}>
+                      Fetch & Re-run
+                    </button>
+                    <button onClick={handleRerunAll}
+                      style={{ width: '100%', padding: '8px 0', fontSize: 12, background: 'var(--card)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+                      ↺ Re-run All
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Version history — only when passes exist */}
+          {stage !== 'configure' && (
+            <div style={{ padding: 16 }}>
+              <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 10 }}>VERSION HISTORY</div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                <input type="text" value={versionLabel} onChange={e => setVersionLabel(e.target.value)}
+                  placeholder="Label (e.g. Draft 1)"
+                  style={{ flex: 1, padding: '6px 10px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
+                <button type="button"
+                  onClick={async () => { setVersionSaveLoading(true); try { await apis.rewrite.versions.save(articleId, versionLabel || undefined); setVersions(await apis.rewrite.versions.list(articleId)); setVersionLabel(''); mutate(); toast.success('Version saved'); } catch { toast.error('Failed to save'); } finally { setVersionSaveLoading(false); } }}
+                  disabled={versionSaveLoading}
+                  style={{ padding: '6px 10px', fontSize: 11, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 6, cursor: versionSaveLoading ? 'not-allowed' : 'pointer' }}>
+                  {versionSaveLoading ? '…' : 'Save'}
+                </button>
+              </div>
+              {versions.length > 0 && (
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                  {versions.slice(0, 8).map(v => (
+                    <li key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderTop: '1px solid var(--border-subtle)', fontSize: 11 }}>
+                      <div>
+                        <div style={{ color: 'var(--text)', fontWeight: 500 }}>{v.label}</div>
+                        <div style={{ color: 'var(--text-dim)', fontSize: 10 }}>{new Date(v.createdAt).toLocaleString()}</div>
+                      </div>
+                      <button type="button"
+                        onClick={async () => { try { await apis.rewrite.versions.restore(articleId, v.id); mutate(); toast.success('Restored'); setVersions(await apis.rewrite.versions.list(articleId)); } catch { toast.error('Restore failed'); } }}
+                        style={{ padding: '3px 8px', fontSize: 10, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-dim)', cursor: 'pointer' }}>
+                        Restore
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </aside>
+
+        {/* ─── CENTER: Pass cards ─────────────────────────────────────────────── */}
+        <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden' }}>
+
+          {/* Mobile: Article card (always) */}
+          <div className="lg:hidden" style={{ padding: '12px 16px 0' }}>
+            <div style={{ padding: 14, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12 }}>
+              {article.source?.name && (
+                <span style={{ display: 'inline-block', fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'rgba(108,99,255,0.12)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', fontWeight: 700, marginBottom: 8 }}>
+                  {article.source.name}
+                </span>
+              )}
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', lineHeight: 1.4 }}>
+                {article.title}
+                {article.wordCount != null && article.wordCount < 300 && (
+                  <span style={{ fontSize: 10, padding: '2px 6px', background: 'var(--amber-bg)', color: 'var(--amber)', borderRadius: 4, fontWeight: 500, marginLeft: 8 }}>Thin &lt;300w</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile: Settings accordion */}
+          <div className="lg:hidden" style={{ padding: '10px 16px 0' }}>
+            <button onClick={() => setMobileSettingsOpen(o => !o)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: stage === 'configure' ? 'var(--card)' : 'rgba(108,99,255,0.05)', border: `1px solid ${stage === 'configure' ? 'var(--border)' : 'rgba(108,99,255,0.15)'}`, borderRadius: mobileSettingsOpen ? '10px 10px 0 0' : 10, cursor: 'pointer' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+                <Settings2 size={14} style={{ color: stage === 'configure' ? 'var(--accent-light)' : 'var(--text-dim)' }} />
+                {stage === 'configure' ? 'AI Settings — configure before starting' : 'Re-run settings'}
+              </span>
+              <ChevronDown size={16} style={{ color: 'var(--text-dim)', transform: mobileSettingsOpen ? 'rotate(180deg)' : 'rotate(0)', transition: '0.2s' }} />
+            </button>
+            {mobileSettingsOpen && (
+              <div style={{ padding: 14, background: 'var(--card)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 10px 10px' }}>
+                {settingsForm}
+                {stage === 'configure' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+                    <button onClick={handleStartRewrite} disabled={rewriteLoading}
+                      style={{ width: '100%', padding: '13px 0', fontSize: 15, fontWeight: 700, background: 'linear-gradient(135deg,var(--accent),#8b5cf6)', color: '#fff', border: 'none', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 2px 16px rgba(108,99,255,0.4)' }}>
+                      {rewriteLoading ? <Loader2 size={16} style={{ animation: 'spin 0.6s linear infinite' }} /> : <Zap size={16} />}
+                      Start Rewrite
+                    </button>
+                    <button onClick={handleStartWithFetch} disabled={rewriteLoading}
+                      style={{ width: '100%', padding: '11px 0', fontSize: 13, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer' }}>
+                      Fetch full article & Rewrite
+                    </button>
+                  </div>
+                )}
+                {stage !== 'configure' && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                    <button onClick={handleStartWithFetch}
+                      style={{ flex: 1, padding: '10px 0', fontSize: 12, fontWeight: 600, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 8, cursor: 'pointer' }}>
+                      Fetch & Re-run
+                    </button>
+                    <button onClick={handleRerunAll}
+                      style={{ flex: 1, padding: '10px 0', fontSize: 12, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+                      ↺ Re-run All
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Center: select all + pass count row */}
+          {stage !== 'configure' && (
+            <div style={{ padding: '12px 16px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700 }}>
+                AI REWRITE PASSES
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <input type="checkbox" onChange={e => handleSelectAll(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+                Select all
+              </label>
+            </div>
+          )}
+
+          {/* Desktop: re-run bar (stage 2/3) */}
+          {stage !== 'configure' && (
+            <div className="hidden lg:flex" style={{ alignItems: 'center', gap: 8, padding: '8px 16px', flexWrap: 'wrap', borderBottom: '1px solid var(--border-subtle)' }}>
+              <select value={outputLanguage} onChange={e => setOutputLanguage(e.target.value)}
+                style={{ padding: '4px 8px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+                {REWRITE_LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </select>
+              <select value={headingFormat} onChange={e => setHeadingFormat(e.target.value)}
+                style={{ padding: '4px 8px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+                {HEADING_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+              <select value={subheadingFormat} onChange={e => setSubheadingFormat(e.target.value)}
+                style={{ padding: '4px 8px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+                {SUBHEADING_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+              <select value={paragraphTag} onChange={e => setParagraphTag(e.target.value)}
+                style={{ padding: '4px 8px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+                {PARAGRAPH_TAGS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)}
+                placeholder="Custom prompt…" rows={1}
+                style={{ flex: 1, minWidth: 120, padding: '4px 8px', fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontFamily: 'inherit', resize: 'none' }} />
+            </div>
+          )}
+
+          {/* Error state */}
+          {(rewriteError || startError) && (
+            <div style={{ margin: '12px 16px', padding: 14, background: 'var(--red-bg)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, marginBottom: 10 }}>
+                {startError || rewriteErrorMessage || 'Failed to load rewrite'}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={handleStartWithFetch}
+                  style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: 'rgba(108,99,255,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 6, cursor: 'pointer' }}>
+                  Fetch & Retry
+                </button>
+                <button onClick={handleRerunAll}
+                  style={{ padding: '6px 14px', fontSize: 11, background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>
+                  Re-run All
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Pass cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 16px 120px' }}>
+            {passes.map((pass, i) => (
+              <RewritePassCard
+                key={pass.id}
+                pass={pass}
+                passNumber={i + 1}
+                selected={selectedPassIds.has(pass.id)}
+                onToggleSelect={() => handleToggleSelect(pass.id)}
+                onOutputChange={v => updatePassOutput(pass.id, v)}
+                onRerun={() => handleRerunSingle(pass.id)}
+                onReset={() => handleResetSingle(pass.id, pass.originalOutput)}
+              />
+            ))}
+          </div>
+
+          {/* Mobile: Status stepper always; WPPublishPanel ONLY in stage 3 */}
+          <div className="lg:hidden" style={{ padding: '0 16px 24px' }}>
+            <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12 }}>ARTICLE STATUS</div>
+            <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
+            {stage === 'done' && wordpressEnabled && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12 }}>PUBLISH TO WORDPRESS</div>
+                <WPPublishPanel
+                  articleId={articleId} rewrite={rewrite}
+                  article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined}
+                  wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} onArticleUpdated={mutateArticle}
+                />
+              </div>
+            )}
+          </div>
+        </main>
+
+        {/* ─── DESKTOP RIGHT SIDEBAR ───────────────────────────────────────────── */}
+        <aside className="hidden lg:flex" style={{
+          width: 300, flexShrink: 0, flexDirection: 'column',
+          borderLeft: '1px solid var(--border)',
+          background: 'var(--surface)',
+          overflowY: 'auto',
+        }}>
+          {/* Status stepper — always visible */}
+          <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12 }}>ARTICLE STATUS</div>
+            <RewriteStatusStepper article={article} runningPassIndex={runningIndex >= 0 ? runningIndex : 0} passes={passes} />
+          </div>
+
+          {/* Stage 1 & 2: placeholder message where publish panel will appear */}
+          {stage !== 'done' && (
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, color: 'var(--text-dim)', textAlign: 'center' }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {stage === 'configure'
+                  ? <Settings2 size={20} style={{ color: 'var(--text-dim)' }} />
+                  : <Loader2 size={20} style={{ color: 'var(--accent-light)', animation: 'spin 1.2s linear infinite' }} />
+                }
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>
+                {stage === 'configure' ? 'Publish options' : 'Publishing options'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                {stage === 'configure'
+                  ? 'Configure settings and start the rewrite. Publish options will appear here when done.'
+                  : 'AI is writing your article. Publish options will appear here when all passes are complete.'}
+              </div>
+            </div>
+          )}
+
+          {/* Stage 3 only: WPPublishPanel + history */}
+          {stage === 'done' && wordpressEnabled && (
+            <>
+              <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
+                <WPPublishPanel
+                  articleId={articleId} rewrite={rewrite}
+                  article={article ? { title: article.title, description: article.description ?? undefined, fullContent: article.fullContent ?? undefined, category: article.category ?? undefined, image: article.image ?? undefined } : undefined}
+                  wpPostId={article?.wpPostId} onPublish={handlePublish} onReject={handleReject} onArticleUpdated={mutateArticle}
+                />
+              </div>
+              <div style={{ padding: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'Geist Mono,monospace', fontWeight: 700, marginBottom: 12 }}>PUBLISH HISTORY</div>
+                <PublishHistory articleId={articleId} refreshKey={publishHistoryRefreshKey} />
+              </div>
+            </>
+          )}
+          {stage === 'done' && !wordpressEnabled && (
+            <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: 12, textAlign: 'center', lineHeight: 1.5 }}>
+              Use <strong>Publish to Website</strong> in the header to send this article to your public news site. WordPress is not used in Charcha CMS.
+            </div>
+          )}
+        </aside>
+
+      </div>{/* end BODY */}
+
+      {/* ═══ MOBILE: Sticky bottom bar — stage-aware ══════════════════════════ */}
+      <div className="lg:hidden" style={{
+        position: 'sticky', bottom: 0, zIndex: 25,
+        padding: '10px 16px',
+        paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
+        background: 'rgba(8,12,20,0.97)', backdropFilter: 'blur(16px)',
+        borderTop: '1px solid var(--border)',
+        display: 'flex', gap: 10,
+      }}>
+        {/* Stage 1: big Start Rewrite button only */}
+        {stage === 'configure' && (
+          <>
+            <button onClick={handleStartRewrite} disabled={rewriteLoading}
+              style={{ flex: 3, padding: '13px 0', fontSize: 15, fontWeight: 700, background: 'linear-gradient(135deg,var(--accent),#8b5cf6)', color: '#fff', border: 'none', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 2px 16px rgba(108,99,255,0.45)' }}>
+              {rewriteLoading ? <Loader2 size={16} style={{ animation: 'spin 0.6s linear infinite' }} /> : <Zap size={16} />}
+              Start Rewrite
+            </button>
+            <button onClick={handleStartWithFetch} disabled={rewriteLoading}
+              style={{ flex: 2, padding: '13px 0', fontSize: 12, background: 'var(--card)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: rewriteLoading ? 'not-allowed' : 'pointer' }}>
+              Fetch & Rewrite
+            </button>
+          </>
+        )}
+        {/* Stage 2: minimal re-run, no release */}
+        {stage === 'running' && (
+          <>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Loader2 size={14} style={{ color: 'var(--accent-light)', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent-light)' }}>Writing pass {Math.max(runningIndex + 1, donePasses)} of {totalPasses}…</div>
+                <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{progressPct}% complete</div>
+              </div>
+            </div>
+            <button onClick={handleRerunAll}
+              style={{ padding: '10px 16px', fontSize: 12, fontWeight: 600, background: 'var(--card)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer' }}>
+              ↺ Re-run All
+            </button>
+          </>
+        )}
+        {/* Stage 3: glowing Release button */}
+        {stage === 'done' && (
+          <>
+            <button onClick={handleRerunAll}
+              style={{ flex: 1, padding: '12px 0', fontSize: 12, background: 'var(--card)', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+              <RotateCw size={14} /> Re-run
+            </button>
+            {wordpressEnabled ? (
+            <button onClick={handleOpenPublishSheet}
+              style={{ flex: 3, padding: '12px 0', fontSize: 15, fontWeight: 700, background: 'linear-gradient(135deg,#00e5a0,#00b87a)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: '0 4px 20px rgba(0,229,160,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Send size={16} />
+              {article.wpPostId ? '🌐 Update Post' : '🚀 Release'}
+            </button>
+            ) : (
+            <button onClick={handleOpenWebsitePublish}
+              disabled={!!article.publishedToWebsite}
+              style={{ flex: 3, padding: '12px 0', fontSize: 15, fontWeight: 700, background: article.publishedToWebsite ? 'var(--card)' : 'rgba(33,150,243,0.2)', color: article.publishedToWebsite ? 'var(--text-dim)' : '#1976d2', border: '1px solid var(--border)', borderRadius: 10, cursor: article.publishedToWebsite ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Globe size={16} />
+              {article.publishedToWebsite ? 'On site' : 'Publish to site'}
+            </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Pulse animation for done-state release button */}
+      <style>{`@keyframes pulse-green { 0%,100%{box-shadow:0 2px 16px rgba(0,229,160,0.45)} 50%{box-shadow:0 2px 28px rgba(0,229,160,0.75)} }`}</style>
+
+      {lockModal}
+
+      {wordpressEnabled && (
+      <PrePublishSheet
+        open={publishSheetOpen}
+        article={article}
+        rewrite={rewrite}
+        onClose={() => setPublishSheetOpen(false)}
+        onArticleUpdated={() => void mutateArticle()}
+        onPublished={() => {
+          setPublishSheetOpen(false)
+          setPublishHistoryRefreshKey(k => k + 1)
+          mutate()
+        }}
+      />
+      )}
+
+      {/* Publish to Website modal */}
+      {websitePublishModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => !websitePublishLoading && setWebsitePublishModalOpen(false)}>
+          <div style={{ background: 'var(--card)', borderRadius: 12, maxWidth: 440, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: 20, borderBottom: '1px solid var(--border)' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Publish to {DEFAULT_WEBSITE_DOMAIN}</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-dim)' }}>Review and confirm before publishing to the news portal.</p>
+            </div>
+            {websitePublishResult ? (
+              <div style={{ padding: 24, textAlign: 'center' }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--success)', marginBottom: 8 }}>Published to {DEFAULT_WEBSITE_DOMAIN}</div>
+                <p style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 10, textAlign: 'left', wordBreak: 'break-all', fontFamily: 'Geist Mono, monospace', lineHeight: 1.4 }}>
+                  Reader link: {getArticleUrl(websitePublishResult.slug)}
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 4 }}>
+                  <a href={getArticleUrl(websitePublishResult.slug)} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', borderRadius: 8, textDecoration: 'none' }}>View article →</a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(getArticleUrl(websitePublishResult.slug))
+                      toast.success('Reader link copied')
+                    }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, fontWeight: 600, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    <Copy size={14} /> Copy link
+                  </button>
+                </div>
+                <button onClick={() => { setWebsitePublishModalOpen(false); setWebsitePublishResult(null) }} style={{ display: 'block', width: '100%', marginTop: 16, padding: '8px 0', fontSize: 12, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text-muted)' }}>Close</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>SEO Title (65 chars)</label>
+                    <input value={websiteOverrides.seoTitle} onChange={e => setWebsiteOverrides(o => ({ ...o, seoTitle: e.target.value }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }} placeholder="65 char headline" />
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{websiteOverrides.seoTitle.length}/65</span>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Meta Description</label>
+                    <textarea value={websiteOverrides.seoDescription} onChange={e => setWebsiteOverrides(o => ({ ...o, seoDescription: e.target.value }))} rows={2} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', resize: 'vertical' }} placeholder="120 char description" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Category</label>
+                    <select value={websiteOverrides.category} onChange={e => setWebsiteOverrides(o => ({ ...o, category: e.target.value }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }}>
+                      {['politics', 'business', 'sports', 'technology', 'entertainment', 'world', 'general'].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Featured Image URL</label>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                      <input
+                        value={websiteOverrides.featuredImage}
+                        onChange={e => setWebsiteOverrides(o => ({ ...o, featuredImage: e.target.value }))}
+                        style={{ flex: 1, minWidth: 0, padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }}
+                        placeholder="https://..."
+                      />
+                      <button
+                        type="button"
+                        title="Fetch og:image or first large image from the original article URL"
+                        onClick={() => void handleFetchFeaturedImageFromSource()}
+                        disabled={websiteFetchImageLoading || websitePublishLoading || !article?.url?.startsWith('http')}
+                        style={{
+                          flexShrink: 0,
+                          padding: '0 12px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 8,
+                          color: 'var(--text-muted)',
+                          cursor: websiteFetchImageLoading || websitePublishLoading || !article?.url?.startsWith('http') ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        {websiteFetchImageLoading ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Download size={14} />}
+                        Fetch
+                      </button>
+                    </div>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4, display: 'block' }}>
+                      Auto-filled from article image or the first &lt;img&gt; in rewritten / source HTML. Use Fetch to load og:image from the source page. You can edit before publish.
+                    </span>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Language</label>
+                    <select value={websiteOverrides.language} onChange={e => setWebsiteOverrides(o => ({ ...o, language: e.target.value }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)' }}>
+                      <option value="english">English</option>
+                      <option value="hindi">Hindi</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setWebsitePublishModalOpen(false)} disabled={websitePublishLoading} style={{ padding: '8px 16px', fontSize: 12, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text-muted)' }}>Cancel</button>
+                  <button onClick={handlePublishToWebsite} disabled={websitePublishLoading} style={{ padding: '8px 20px', fontSize: 12, fontWeight: 600, background: '#1976d2', color: '#fff', border: 'none', borderRadius: 8, cursor: websitePublishLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {websitePublishLoading ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Globe size={14} />}
+                    Confirm & Publish
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

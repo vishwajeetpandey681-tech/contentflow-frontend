@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, X, RotateCw, AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Loader2, Pencil, Unlink, Lock, Star, Circle, Globe } from 'lucide-react'
+import { Check, X, RotateCw, RotateCcw, AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Loader2, Pencil, Unlink, Lock, Star, Circle, Globe, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { timeAgo } from '@/lib/utils'
-import { inboxApi } from '@/lib/api'
+import { useContentWorkspace } from '@/lib/content-workspace'
+import { getArticleUrl } from '@/lib/config'
 import { useAuthStore } from '@/lib/auth-store'
 import type { ScraperArticle, ArticleStatus, RewriteStatus } from '@/types/article'
 import { RejectModal } from './RejectModal'
@@ -15,6 +16,8 @@ interface ArticleCardProps {
   article: ScraperArticle
   onApprove: () => void
   onReject: (reason?: string) => void
+  /** Rejected tab: move back to Pending */
+  onRestore?: () => void
   onRefresh: () => void
   onRefreshStats?: () => void
   onRetryRewrite?: (id: string) => void
@@ -27,12 +30,14 @@ interface ArticleCardProps {
   onToggleSelect?: () => void
   onMarkRead?: (id: string, read: boolean) => void
   onMarkStar?: (id: string, starred: boolean) => void
+  onRewriteWithTrend?: (id: string, trendKeyword: string, trendTraffic: string) => void
 }
 
 export function ArticleCard({
   article,
   onApprove,
   onReject,
+  onRestore,
   onRefresh,
   onRefreshStats,
   onRetryRewrite,
@@ -45,9 +50,12 @@ export function ArticleCard({
   onToggleSelect,
   onMarkRead,
   onMarkStar,
+  onRewriteWithTrend,
 }: ArticleCardProps) {
   const router = useRouter()
-  const currentUserId = useAuthStore(s => s.user?.id)
+  const { apis, routePrefix, wordpressEnabled } = useContentWorkspace()
+  const inboxBase = routePrefix.inbox
+  const currentUserId = useAuthStore(s => s.user?.id ?? s.cmsUser?.id)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [localArticle, setLocalArticle] = useState<ScraperArticle>(article)
@@ -66,7 +74,7 @@ export function ArticleCard({
     }
     setFetchingFull(true)
     try {
-      const res = await inboxApi.fetchFull(localArticle.id)
+      const res = await apis.inbox.fetchFull(localArticle.id)
       setLocalArticle(res.data?.data ?? localArticle)
       onRefresh()
     } catch (err) {
@@ -250,6 +258,56 @@ export function ArticleCard({
                 {article.description}
               </div>
             )}
+            {/* Trending badge */}
+            {article.isTrending && article.trendKeyword && (
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 10,
+                    padding: '2px 8px',
+                    borderRadius: 5,
+                    background: 'linear-gradient(135deg, rgba(249,115,22,0.2), rgba(234,88,12,0.15))',
+                    color: '#f97316',
+                    border: '1px solid rgba(249,115,22,0.35)',
+                    fontFamily: 'Geist Mono, monospace',
+                    fontWeight: 600,
+                  }}
+                >
+                  🔥 {article.trendKeyword}
+                  {article.trendTraffic && (
+                    <span style={{ opacity: 0.9, fontWeight: 500 }}> · {article.trendTraffic}</span>
+                  )}
+                </span>
+                {onRewriteWithTrend && article.trendKeyword && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onRewriteWithTrend(article.id, article.trendKeyword!, article.trendTraffic || 'Trending')
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 10px',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      background: 'var(--accent-glow)',
+                      color: 'var(--accent-light)',
+                      border: '1px solid rgba(124,58,237,0.3)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      fontFamily: 'Geist Mono, monospace',
+                    }}
+                  >
+                    <Zap size={10} />
+                    Rewrite with trend keyword
+                  </button>
+                )}
+              </div>
+            )}
             {/* Meta badges row */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {article.assignedTo && article.assignedToName && (
@@ -321,6 +379,48 @@ export function ArticleCard({
                   {article.source.name}
                 </span>
               )}
+              {article.publishedToWebsite && (
+                article.websiteSlug ? (
+                  <a
+                    href={getArticleUrl(article.websiteSlug)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: 10,
+                      padding: '1px 6px',
+                      borderRadius: 4,
+                      border: '1px solid rgba(33,150,243,0.3)',
+                      color: '#1976d2',
+                      background: 'rgba(33,150,243,0.1)',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Globe size={10} /> On Website
+                  </a>
+                ) : (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: 10,
+                      padding: '1px 6px',
+                      borderRadius: 4,
+                      border: '1px solid rgba(33,150,243,0.3)',
+                      color: '#1976d2',
+                      background: 'rgba(33,150,243,0.1)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Globe size={10} /> On Website
+                  </span>
+                )
+              )}
               {article.category && (
                 <span
                   style={{
@@ -389,7 +489,7 @@ export function ArticleCard({
                 )}
                 {rewriteStatus === 'DONE' && (
                   <Link
-                    href={`/scraper/inbox/${article.id}/rewrite/`}
+                    href={`${inboxBase}/${article.id}/rewrite/`}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -397,15 +497,36 @@ export function ArticleCard({
                       fontSize: 10,
                       padding: '3px 8px',
                       borderRadius: 6,
-                      background: article.wpPostId ? 'rgba(34,211,238,0.15)' : 'var(--green-bg)',
-                      color: article.wpPostId ? 'var(--cyan)' : 'var(--green)',
-                      border: article.wpPostId ? '1px solid rgba(34,211,238,0.2)' : '1px solid rgba(34,197,94,0.2)',
+                      background:
+                        wordpressEnabled && article.wpPostId
+                          ? 'rgba(34,211,238,0.15)'
+                          : !wordpressEnabled && (article.publishedToWebsite || article.websiteSlug)
+                            ? 'rgba(34,211,238,0.15)'
+                            : 'var(--green-bg)',
+                      color:
+                        wordpressEnabled && article.wpPostId
+                          ? 'var(--cyan)'
+                          : !wordpressEnabled && (article.publishedToWebsite || article.websiteSlug)
+                            ? 'var(--cyan)'
+                            : 'var(--green)',
+                      border:
+                        wordpressEnabled && article.wpPostId
+                          ? '1px solid rgba(34,211,238,0.2)'
+                          : !wordpressEnabled && (article.publishedToWebsite || article.websiteSlug)
+                            ? '1px solid rgba(34,211,238,0.2)'
+                            : '1px solid rgba(34,197,94,0.2)',
                       fontFamily: 'Geist Mono, monospace',
                       textDecoration: 'none',
                       cursor: 'pointer',
                     }}
                   >
-                    {article.wpPostId ? '✓ Published' : '✓ Ready to Publish'}
+                    {wordpressEnabled
+                      ? article.wpPostId
+                        ? '✓ Published'
+                        : '✓ Ready to Publish'
+                      : article.publishedToWebsite || article.websiteSlug
+                        ? '✓ On site'
+                        : '✓ Ready to publish'}
                   </Link>
                 )}
                 {rewriteStatus === 'FAILED' && (
@@ -512,6 +633,31 @@ export function ArticleCard({
                 )}
               </div>
             )}
+            {/* REJECTED: Restore to pending */}
+            {article.status === 'REJECTED' && onRestore && (
+              <div style={{ marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => onRestore()}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '5px 10px',
+                    background: 'var(--surface)',
+                    color: 'var(--accent-light)',
+                    border: '1px solid rgba(124,58,237,0.35)',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <RotateCcw size={12} />
+                  Restore to pending
+                </button>
+              </div>
+            )}
             {/* PENDING: Approve + Reject */}
             {showActions && (
               <div className="flex gap-1" style={{ marginTop: 4 }}>
@@ -555,8 +701,8 @@ export function ArticleCard({
                 </button>
               </div>
             )}
-            {/* PUBLISHED: Update post & Unlink/Unpublish */}
-            {showPublishedActions && article.wpPostId && onUpdatePost && (
+            {/* PUBLISHED: Update post & Unlink/Unpublish (WordPress — Studio only) */}
+            {wordpressEnabled && showPublishedActions && article.wpPostId && onUpdatePost && (
               <div className="flex gap-1" style={{ marginTop: 4 }}>
                 <button
                   onClick={() => onUpdatePost(article.id)}
@@ -616,7 +762,7 @@ export function ArticleCard({
               <div style={{ marginTop: 4 }}>
                 {rewriteStatus === 'IDLE' && (
                   <button
-                    onClick={() => router.push(`/scraper/inbox/${article.id}/rewrite/`)}
+                    onClick={() => router.push(`${inboxBase}/${article.id}/rewrite/`)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -636,7 +782,7 @@ export function ArticleCard({
                 )}
                 {rewriteStatus === 'RUNNING' && (
                   <button
-                    onClick={() => router.push(`/scraper/inbox/${article.id}/rewrite/`)}
+                    onClick={() => router.push(`${inboxBase}/${article.id}/rewrite/`)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -655,7 +801,7 @@ export function ArticleCard({
                 )}
                 {rewriteStatus === 'DONE' && (
                   <button
-                    onClick={() => router.push(`/scraper/inbox/${article.id}/rewrite/`)}
+                    onClick={() => router.push(`${inboxBase}/${article.id}/rewrite/`)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',

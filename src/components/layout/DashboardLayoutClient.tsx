@@ -2,6 +2,7 @@
 
 import AuthGuard from '@/components/AuthGuard'
 import DashboardShell from '@/components/layout/DashboardShell'
+import { ContentWorkspaceProvider, studioWorkspaceValue } from '@/lib/content-workspace'
 
 export default function DashboardLayoutClient({
   children,
@@ -10,7 +11,9 @@ export default function DashboardLayoutClient({
 }) {
   return (
     <AuthGuard>
-      <DashboardShell>{children}</DashboardShell>
+      <ContentWorkspaceProvider value={studioWorkspaceValue}>
+        <DashboardShell>{children}</DashboardShell>
+      </ContentWorkspaceProvider>
     </AuthGuard>
   )
 }

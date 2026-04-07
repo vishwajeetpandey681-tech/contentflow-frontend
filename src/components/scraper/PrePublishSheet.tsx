@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, Upload, Loader2, Send, Calendar, CheckCircle2, ExternalLink,
-  ChevronDown, Globe, Image as ImageIcon, Clock,
+  ChevronDown, Globe, Image as ImageIcon, Clock, Download,
 } from 'lucide-react'
-import { publishApi, wpMetaApi, settingsApi, mediaApi } from '@/lib/api'
+import { useContentWorkspace } from '@/lib/content-workspace'
 import toast from 'react-hot-toast'
 import type { ScraperArticle, ArticleRewrite } from '@/types/article'
+import { resolveFeaturedImageUrl } from '@/lib/featured-image'
 import type { WpPublishHistoryEntry } from '@/lib/api'
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
   rewrite: ArticleRewrite | undefined
   onClose: () => void
   onPublished: (result: { postId?: number; postUrl?: string; status?: string; siteLabel?: string }) => void
+  /** Called after fetching image from source URL so parent can refresh article data */
+  onArticleUpdated?: () => void
 }
 
 async function compressToWebP(file: File, quality = 0.82, maxPx = 1200): Promise<File> {
@@ -45,7 +48,8 @@ async function compressToWebP(file: File, quality = 0.82, maxPx = 1200): Promise
 
 const s = (base: React.CSSProperties) => base
 
-export function PrePublishSheet({ open, article, rewrite, onClose, onPublished }: Props) {
+export function PrePublishSheet({ open, article, rewrite, onClose, onPublished, onArticleUpdated }: Props) {
+  const { apis } = useContentWorkspace()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const passes = rewrite?.passes ?? []
 
@@ -76,6 +80,7 @@ export function PrePublishSheet({ open, article, rewrite, onClose, onPublished }
   const [metaLoading, setMetaLoading] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [imageUploading, setImageUploading] = useState(false)
+  const [sourceImageLoading, setSourceImageLoading] = useState(false)
 
   // Success
   const [result, setResult] = useState<{ postId?: number; postUrl?: string; status?: string; siteLabel?: string } | null>(null)
@@ -88,34 +93,37 @@ export function PrePublishSheet({ open, article, rewrite, onClose, onPublished }
     setTitle(char65.slice(0, 200))
     setSeoTitle(char65.slice(0, 60))
     setMetaDesc(char120.slice(0, 160))
-    if (article.image) setFeaturedMediaUrl(article.image)
+    const imgUrl = resolveFeaturedImageUrl(article, rewrite)
+    if (imgUrl) setFeaturedMediaUrl(imgUrl)
+    else setFeaturedMediaUrl('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when sheet opens for this article (not passes/title churn)
   }, [open, article.id])
 
   // Load sites + ping health
   useEffect(() => {
     if (!open) return
-    settingsApi.get().then(d => {
+    apis.settings.get().then(d => {
       const s = d.wordpressSites || []
       setSites(s)
       if (s.length > 0) setSelectedSiteId(s[0].id)
       // Ping all configured sites
       s.filter(site => site.configured !== false).forEach(site => {
         setSiteHealth(prev => ({ ...prev, [site.id]: 'checking' }))
-        settingsApi.testWordpress({ siteId: site.id })
+        apis.settings.testWordpress({ siteId: site.id })
           .then(r => setSiteHealth(prev => ({ ...prev, [site.id]: r.ok ? 'ok' : 'error' })))
           .catch(() => setSiteHealth(prev => ({ ...prev, [site.id]: 'error' })))
       })
     }).catch(() => {})
-  }, [open])
+  }, [open, apis.settings])
 
   // Load meta (categories/tags/users) when site changes
   const loadMeta = useCallback(async (siteId: string) => {
     setMetaLoading(true)
     try {
       const [cats, tgs, usrs] = await Promise.all([
-        wpMetaApi.categories(siteId),
-        wpMetaApi.tags(siteId),
-        wpMetaApi.users(siteId),
+        apis.wpMeta.categories(siteId),
+        apis.wpMeta.tags(siteId),
+        apis.wpMeta.users(siteId),
       ])
       setCategories(cats)
       setTags(tgs)
@@ -126,7 +134,7 @@ export function PrePublishSheet({ open, article, rewrite, onClose, onPublished }
     } finally {
       setMetaLoading(false)
     }
-  }, [])
+  }, [apis.wpMeta])
 
   useEffect(() => {
     if (open && selectedSiteId) loadMeta(selectedSiteId)
@@ -136,7 +144,7 @@ export function PrePublishSheet({ open, article, rewrite, onClose, onPublished }
     setImageUploading(true)
     try {
       const compressed = await compressToWebP(file)
-      const res = await wpMetaApi.uploadImage(compressed, selectedSiteId || undefined)
+      const res = await apis.wpMeta.uploadImage(compressed, selectedSiteId || undefined)
       setFeaturedMediaId(res.id)
       setFeaturedMediaUrl(res.url)
       toast.success('Image uploaded')
@@ -147,11 +155,30 @@ export function PrePublishSheet({ open, article, rewrite, onClose, onPublished }
     }
   }
 
+  const handleFetchImageFromSource = async () => {
+    if (!article.url?.startsWith('http')) {
+      toast.error('Article has no source URL to fetch from')
+      return
+    }
+    setSourceImageLoading(true)
+    try {
+      const { image } = await apis.inbox.extractImage(article.id)
+      setFeaturedMediaUrl(image)
+      setFeaturedMediaId(undefined)
+      onArticleUpdated?.()
+      toast.success('Image fetched from source page')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not fetch image from source')
+    } finally {
+      setSourceImageLoading(false)
+    }
+  }
+
   const handleImageUrl = async () => {
     if (!featuredMediaUrl || !featuredMediaUrl.startsWith('http')) return
     setImageUploading(true)
     try {
-      const res = await mediaApi.fetchFromUrl(featuredMediaUrl, selectedSiteId || undefined)
+      const res = await apis.media.fetchFromUrl(featuredMediaUrl, selectedSiteId || undefined)
       setFeaturedMediaId(res.id)
       setFeaturedMediaUrl(res.url)
       toast.success('Image uploaded from URL')
@@ -165,7 +192,7 @@ export function PrePublishSheet({ open, article, rewrite, onClose, onPublished }
   const handlePublish = async (publishStatus: 'draft' | 'publish' | 'future') => {
     setPublishing(true)
     try {
-      const res = await publishApi.wordpress(article.id, {
+      const res = await apis.publish.wordpress(article.id, {
         status: publishStatus,
         categoryId: categoryId || undefined,
         authorId: authorId || undefined,
@@ -425,11 +452,34 @@ export function PrePublishSheet({ open, article, rewrite, onClose, onPublished }
                     )}
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', flexWrap: 'wrap' }}>
                   <input value={!featuredMediaId ? featuredMediaUrl : ''} onChange={e => { setFeaturedMediaUrl(e.target.value); setFeaturedMediaId(undefined) }}
                     placeholder="Image URL"
-                    style={{ flex: 1, padding: '10px 12px', fontSize: 13, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', minHeight: 44 }}
+                    style={{ flex: 1, minWidth: 120, padding: '10px 12px', fontSize: 13, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', minHeight: 44 }}
                   />
+                  <button
+                    type="button"
+                    title="Fetch og:image or first large image from the original article URL"
+                    onClick={() => void handleFetchImageFromSource()}
+                    disabled={sourceImageLoading || !article.url?.startsWith('http')}
+                    style={{
+                      padding: '0 14px',
+                      minHeight: 44,
+                      background: 'var(--card)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 10,
+                      color: 'var(--text-muted)',
+                      fontSize: 12,
+                      cursor: sourceImageLoading || !article.url?.startsWith('http') ? 'not-allowed' : 'pointer',
+                      flexShrink: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    {sourceImageLoading ? <Loader2 size={14} style={{ animation: 'spin 0.6s linear infinite' }} /> : <Download size={14} />}
+                    Fetch from source
+                  </button>
                   {!featuredMediaId && featuredMediaUrl && (
                     <button onClick={handleImageUrl} disabled={imageUploading}
                       style={{ padding: '0 14px', minHeight: 44, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>
@@ -442,6 +492,9 @@ export function PrePublishSheet({ open, article, rewrite, onClose, onPublished }
                   </button>
                 </div>
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleImageFile(f) }} />
+                <p style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 6, marginBottom: 0 }}>
+                  Prefilled when the sheet opens. “Fetch from source” loads og:image or the first large image from the original article URL.
+                </p>
               </div>
 
               {/* Publish Status */}

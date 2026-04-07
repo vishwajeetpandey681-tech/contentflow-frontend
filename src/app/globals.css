@@ -1,9 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
 
 :root {
   color-scheme: dark;
@@ -518,4 +518,62 @@ button, a, [role="button"] {
 .rich-text-content h6:first-child,
 .rich-text-content p:first-child {
   margin-top: 0;
+}
+
+/* Font weight & rhythm by heading tag (editor + optional reader wrapper `.article-html-content`) */
+.rich-text-content h1,
+.article-html-content h1 {
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.rich-text-content h2,
+.article-html-content h2 {
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+.rich-text-content h3,
+.article-html-content h3 {
+  font-weight: 600;
+  line-height: 1.25;
+}
+/* h4 is the default *paragraph* wrapper in rewrites — use normal body weight */
+.rich-text-content h4,
+.article-html-content h4 {
+  font-weight: 400;
+  line-height: 1.65;
+}
+.rich-text-content h5,
+.article-html-content h5 {
+  font-weight: 600;
+  line-height: 1.35;
+}
+.rich-text-content h6,
+.article-html-content h6 {
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+.rich-text-content p,
+.article-html-content p {
+  font-weight: 400;
+  line-height: 1.65;
+}
+.rich-text-content strong,
+.rich-text-content b,
+.article-html-content strong,
+.article-html-content b {
+  font-weight: 600;
+}
+.rich-text-content em,
+.rich-text-content i:not([class]),
+.article-html-content em,
+.article-html-content i:not([class]) {
+  font-style: italic;
+}
+.rich-text-content blockquote,
+.article-html-content blockquote {
+  font-weight: 400;
 }

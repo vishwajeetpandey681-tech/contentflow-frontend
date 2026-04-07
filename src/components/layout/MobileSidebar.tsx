@@ -4,20 +4,24 @@ import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Rss, Inbox, Settings, Newspaper, Zap, LogOut, User, Users, FolderOpen } from 'lucide-react'
+import { Rss, Inbox, Settings, Newspaper, Zap, LogOut, User, Users, FolderOpen, CheckSquare, TrendingUp } from 'lucide-react'
 import { useSources } from '@/hooks/useSources'
 import { useStats } from '@/hooks/useStats'
+import { useApprovalStats } from '@/hooks/useApprovalStats'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasPermission } from '@/lib/permissions'
 
-const navItems: Array<{
+const baseNavItems: Array<{
   section: string
-  items: Array<{ label: string; href: string; icon: typeof Rss; soon?: boolean; badge?: 'sources' | 'pending' }>
+  items: Array<{ label: string; href: string; icon: typeof Rss; soon?: boolean; badge?: 'sources' | 'pending' | 'approval' }>
 }> = [
   {
     section: 'Scraper',
     items: [
       { label: 'Sources', href: '/scraper/', icon: Rss, badge: 'sources' },
       { label: 'Inbox', href: '/scraper/inbox/', icon: Inbox, badge: 'pending' },
+      { label: 'Trends', href: '/scraper/trends/', icon: TrendingUp },
+      { label: 'Approval', href: '/approval/', icon: CheckSquare, badge: 'approval' },
     ],
   },
   {
@@ -33,7 +37,6 @@ const navItems: Array<{
     items: [
       { label: 'Settings', href: '/settings/', icon: Settings },
       { label: 'Profile', href: '/profile/', icon: User },
-      { label: 'Team', href: '/team/', icon: Users },
     ],
   },
 ]
@@ -49,8 +52,17 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
   const prevPathRef = useRef(path)
   const { sources = [] } = useSources()
   const { stats = { pending: 0, approved: 0, rejected: 0, failed: 0 } } = useStats()
+  const { stats: approvalStats } = useApprovalStats(30000)
   const user = useAuthStore(s => s.user)
   const clearAuth = useAuthStore(s => s.clearAuth)
+
+  const showTeam = hasPermission(user?.role, 'studio', 'team')
+  const navItems = baseNavItems.map((block, i) => {
+    if (i !== baseNavItems.length - 1) return block
+    const systemItems = [...block.items]
+    if (showTeam) systemItems.push({ label: 'Team', href: '/settings/team/', icon: Users })
+    return { ...block, items: systemItems }
+  })
 
   useEffect(() => {
     if (prevPathRef.current !== path) {
@@ -176,6 +188,16 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
                             >
                               {stats.pending}
                             </span>
+                          ) : (item.badge === 'approval' && (approvalStats?.pending ?? 0) > 0) ? (
+                            <span
+                              className="ml-auto rounded-full px-1.5 py-0.5 font-mono text-[10px]"
+                              style={{
+                                background: (approvalStats?.pending ?? 0) > 5 ? 'var(--red)' : 'var(--amber-bg)',
+                                color: (approvalStats?.pending ?? 0) > 5 ? '#fff' : 'var(--amber)',
+                              }}
+                            >
+                              {approvalStats?.pending}
+                            </span>
                           ) : item.soon ? (
                             <span className="ml-auto font-mono text-[9px]" style={{ color: 'var(--text-dim)' }}>
                               SOON
@@ -193,6 +215,19 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
               className="shrink-0 p-2"
               style={{ borderTop: '1px solid var(--border)', background: 'rgba(0,0,0,0.1)' }}
             >
+              {user?.access?.includes('cms') && (
+                <Link
+                  href="/cms/inbox/"
+                  className="mb-2 flex min-h-[36px] items-center justify-center gap-2 rounded-lg text-[11px] font-semibold no-underline"
+                  style={{
+                    background: 'rgba(204,0,0,0.1)',
+                    border: '1px solid rgba(204,0,0,0.2)',
+                    color: '#f87171',
+                  }}
+                >
+                  📰 CMS
+                </Link>
+              )}
               <Link
                 href="/profile/"
                 className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 mb-1.5 no-underline"

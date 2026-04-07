@@ -36,7 +36,7 @@ export default function Home() {
       }}
     >
       <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 28, letterSpacing: '0.08em' }}>
-        AdTech365 · 7 Digital Tech
+        Charcha Express
       </p>
 
       <div
@@ -137,7 +137,7 @@ export default function Home() {
         </Link>
       </div>
 
-      <p style={{ marginTop: 32, fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>© {new Date().getFullYear()} AdTech365</p>
+      <p style={{ marginTop: 32, fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>© {new Date().getFullYear()} Charcha Express</p>
     </div>
   )
 }

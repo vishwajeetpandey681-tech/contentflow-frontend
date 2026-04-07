@@ -110,7 +110,7 @@ function CmsLoginForm() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="you@adtech365.com"
+              placeholder="you@charchaexpress.com"
               required
               style={{
                 width: '100%',
@@ -193,7 +193,7 @@ function CmsLoginForm() {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
-          © 2026 AdTech365 · 7 Digital Tech
+          © {new Date().getFullYear()} Charcha Express
         </div>
       </div>
     </div>

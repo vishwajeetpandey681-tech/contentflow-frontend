@@ -8,7 +8,7 @@ export const CONFIGURED_PUBLIC_API_URL = (
 
 /** Default public site domain when building production reader URLs (override with NEXT_PUBLIC_WEBSITE_DOMAIN). */
 export const DEFAULT_WEBSITE_DOMAIN =
-  process.env.NEXT_PUBLIC_WEBSITE_DOMAIN || 'example.com'
+  process.env.NEXT_PUBLIC_WEBSITE_DOMAIN || 'charchaexpress.com'
 
 /**
  * Full base URL for reader article links (your public news site).

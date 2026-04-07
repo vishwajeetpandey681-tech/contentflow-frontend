@@ -6,9 +6,9 @@ export const CONFIGURED_PUBLIC_API_URL = (
   process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4500/api'
 ).replace(/\/$/, '')
 
-/** Default website domain for publishing articles (adtech365.com). */
+/** Default website domain for publishing articles. */
 export const DEFAULT_WEBSITE_DOMAIN =
-  process.env.NEXT_PUBLIC_WEBSITE_DOMAIN || 'adtech365.com'
+  process.env.NEXT_PUBLIC_WEBSITE_DOMAIN || 'charchaexpress.com'
 
 /**
  * Full base URL for reader article links (news portal / contentflow-news).

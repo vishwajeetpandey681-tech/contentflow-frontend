@@ -2,8 +2,8 @@
 const nextConfig = {
   trailingSlash: true,
 
-  // Enable standalone output for Docker / VPS deployments
-  // Uncomment when deploying: output: 'standalone',
+  // Standalone bundle for Docker / VPS (smaller runtime image)
+  output: 'standalone',
 
   // Image optimization — allow external article thumbnails
   images: {

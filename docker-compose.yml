@@ -1,0 +1,20 @@
+# Example: copy to the server, set .env.production, then:
+#   docker compose --env-file .env.production up -d --build
+#
+# Required in .env.production (or export before compose):
+#   NEXT_PUBLIC_API_URL=https://your-backend.example.com/api
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
+        NEXT_PUBLIC_WEBSITE_URL: ${NEXT_PUBLIC_WEBSITE_URL:-}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production

@@ -22,6 +22,9 @@
 #
 # Or one line after cloning:
 #    NEXT_PUBLIC_API_URL=https://api.example.com/api bash deploy/vps-install.sh
+#
+# With Nginx on the same host, bind the app to localhost only:
+#    BIND_LOCALHOST=1 bash deploy/vps-install.sh
 
 set -euo pipefail
 
@@ -73,10 +76,20 @@ ENV_FILE="$APP_DIR/.env.production"
 } >"$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
-echo "Building and starting stack (port 3000) ..."
-"${COMPOSE[@]}" --env-file "$ENV_FILE" up -d --build
+COMPOSE_FS=(-f docker-compose.yml)
+if [[ "${BIND_LOCALHOST:-}" == "1" ]]; then
+  COMPOSE_FS+=(-f deploy/docker-compose.bind-localhost.yml)
+  echo "Building and starting stack (127.0.0.1:3000 only — use Nginx for TLS) ..."
+else
+  echo "Building and starting stack (port 3000) ..."
+fi
+
+"${COMPOSE[@]}" "${COMPOSE_FS[@]}" --env-file "$ENV_FILE" up -d --build
 
 echo ""
 echo "Done. App: http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000 (or your domain behind Nginx)."
-echo "Logs: cd $APP_DIR && docker compose --env-file .env.production logs -f web"
-echo "Nginx TLS: see deploy/nginx-site.example.conf. To bind localhost only: docker compose -f docker-compose.yml -f deploy/docker-compose.bind-localhost.yml --env-file .env.production up -d --build"
+echo "Logs: cd $APP_DIR && ${COMPOSE[*]} ${COMPOSE_FS[*]} --env-file .env.production logs -f web"
+echo "Nginx TLS: see deploy/nginx-site.example.conf"
+if [[ "${BIND_LOCALHOST:-}" != "1" ]]; then
+  echo "To bind localhost only (then rebuild): BIND_LOCALHOST=1 bash deploy/vps-install.sh"
+fi
